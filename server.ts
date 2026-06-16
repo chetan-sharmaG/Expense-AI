@@ -11,7 +11,8 @@ dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 dotenv.config();
 
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
+// NOTE: Vite is loaded via dynamic import inside startServer() to avoid loading
+// Vite's dev-server infrastructure in production/serverless environments.
 import { GoogleGenAI, Type } from '@google/genai';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
@@ -888,6 +889,8 @@ app.delete('/api/settlements/:id', authenticateJWT, async (req: any, res) => {
 // ------------------- VITE & STATIC HANDLING -------------------
 export async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    // Dynamic import so Vite is never loaded in the serverless/production bundle
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
