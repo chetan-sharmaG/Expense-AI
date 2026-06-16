@@ -1,36 +1,50 @@
 /**
  * @license
- * SPDX-License-Identifier: Apache-2.5
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 import mongoose from 'mongoose';
 import { app } from '../server';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/familyfunds';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 let isConnected = false;
 
 async function connectDB() {
-  if (isConnected) return;
-  
-  // Check if there is already an active mongoose connection
-  if (mongoose.connection.readyState >= 1) {
-    isConnected = true;
-    return;
+  // Reuse existing connection if healthy
+  if (isConnected && mongoose.connection.readyState === 1) return;
+
+  if (!MONGODB_URI) {
+    throw new Error(
+      'MONGODB_URI environment variable is not set. Please add it in Vercel → Project Settings → Environment Variables.'
+    );
   }
-  
-  await mongoose.connect(MONGODB_URI);
+
+  // Disable command buffering so operations fail fast instead of queueing forever
+  mongoose.set('bufferCommands', false);
+
+  await mongoose.connect(MONGODB_URI, {
+    // Must be shorter than Vercel's 10s function timeout
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    // Keep the connection pool small for serverless to avoid exhausting Atlas limits
+    maxPoolSize: 1,
+  });
+
   isConnected = true;
-  console.log('Serverless Mongoose Connected.');
+  console.log('[Serverless] MongoDB connected successfully.');
 }
 
 export default async (req: any, res: any) => {
   try {
     await connectDB();
-    // Forward the request and response to our main Express application instance
+    // Forward request to our main Express application
     app(req, res);
   } catch (error: any) {
-    console.error('Serverless connection error:', error);
-    res.status(500).json({ error: 'Serverless Database Connection Error', message: error.message });
+    console.error('[Serverless] Fatal error:', error);
+    res.status(500).json({
+      error: 'Serverless Database Connection Error',
+      message: error.message,
+    });
   }
 };
