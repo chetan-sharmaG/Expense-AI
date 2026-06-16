@@ -4,7 +4,8 @@
  */
 
 import mongoose from 'mongoose';
-import { app } from '../server';
+// @ts-ignore
+import { app } from '../dist/server.cjs';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
