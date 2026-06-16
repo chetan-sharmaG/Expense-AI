@@ -1,0 +1,167 @@
+{
+  "family": {
+    "id": "fam-1",
+    "name": "Mehta Family Assembly",
+    "createdAt": "2026-06-14T13:41:00.264Z"
+  },
+  "groups": [
+    {
+      "id": "grp-1",
+      "name": "Couple 1 (Rahul & Priya)",
+      "familyId": "fam-1"
+    },
+    {
+      "id": "grp-2",
+      "name": "Couple 2 (Amit & Sneha)",
+      "familyId": "fam-1"
+    },
+    {
+      "id": "grp-3",
+      "name": "Parents (Papa & Mummy)",
+      "familyId": "fam-1"
+    }
+  ],
+  "users": [
+    {
+      "id": "usr-1",
+      "name": "Rahul",
+      "email": "cs194555@gmail.com",
+      "groupId": "grp-1",
+      "role": "admin"
+    },
+    {
+      "id": "usr-2",
+      "name": "Priya",
+      "email": "priya.mehta@family.com",
+      "groupId": "grp-1",
+      "role": "member"
+    },
+    {
+      "id": "usr-3",
+      "name": "Amit",
+      "email": "amit.mehta@family.com",
+      "groupId": "grp-2",
+      "role": "member"
+    },
+    {
+      "id": "usr-4",
+      "name": "Sneha",
+      "email": "sneha.mehta@family.com",
+      "groupId": "grp-2",
+      "role": "member"
+    },
+    {
+      "id": "usr-5",
+      "name": "Papa",
+      "email": "papa.mehta@family.com",
+      "groupId": "grp-3",
+      "role": "member"
+    },
+    {
+      "id": "usr-6",
+      "name": "Mummy",
+      "email": "mummy.mehta@family.com",
+      "groupId": "grp-3",
+      "role": "member"
+    }
+  ],
+  "expenses": [
+    {
+      "id": "exp-1",
+      "amount": 4500,
+      "category": "Rent & Living",
+      "paidBy": "usr-1",
+      "groupId": "grp-1",
+      "date": "2026-06-02",
+      "merchant": "Society Main Off",
+      "notes": "Monthly maintenance payment contribution",
+      "createdAt": "2026-06-14T13:41:00.263Z"
+    },
+    {
+      "id": "exp-2",
+      "amount": 1200,
+      "category": "Utilities",
+      "paidBy": "usr-3",
+      "groupId": "grp-2",
+      "date": "2026-06-03",
+      "merchant": "Tata Power",
+      "notes": "Electricity bill payment for Couple 2 Annex",
+      "createdAt": "2026-06-14T13:41:00.264Z"
+    },
+    {
+      "id": "exp-3",
+      "amount": 3200,
+      "category": "Groceries",
+      "paidBy": "usr-6",
+      "groupId": "grp-3",
+      "date": "2026-06-05",
+      "merchant": "DMart Superstore",
+      "notes": "Monthly staples, oil, rice, and groceries",
+      "createdAt": "2026-06-14T13:41:00.264Z"
+    },
+    {
+      "id": "exp-4",
+      "amount": 850,
+      "category": "Vegetables & Fruits",
+      "paidBy": "usr-1",
+      "groupId": "grp-1",
+      "date": "2026-06-08",
+      "merchant": "Heera Vegetables",
+      "notes": "Fresh weekly vegetables logged directly",
+      "createdAt": "2026-06-14T13:41:00.264Z"
+    },
+    {
+      "id": "exp-5",
+      "amount": 2100,
+      "category": "Dining Out",
+      "paidBy": "usr-4",
+      "groupId": "grp-2",
+      "date": "2026-06-10",
+      "merchant": "The Olive Bistro",
+      "notes": "Family dinner outing weekend",
+      "createdAt": "2026-06-14T13:41:00.264Z"
+    },
+    {
+      "id": "exp-6",
+      "amount": 600,
+      "category": "Medical",
+      "paidBy": "usr-5",
+      "groupId": "grp-3",
+      "date": "2026-06-11",
+      "merchant": "Apollo Pharmacy",
+      "notes": "Papa health supplements checkup",
+      "createdAt": "2026-06-14T13:41:00.264Z"
+    },
+    {
+      "id": "exp-7",
+      "amount": 1500,
+      "category": "Subscription & Internet",
+      "paidBy": "usr-1",
+      "groupId": "grp-1",
+      "date": "2026-06-12",
+      "merchant": "Netflix & JioFiber",
+      "notes": "Family entertainment package renewal",
+      "createdAt": "2026-06-14T13:41:00.264Z"
+    }
+  ],
+  "settlements": [
+    {
+      "id": "set-1",
+      "fromGroup": "grp-2",
+      "toGroup": "grp-1",
+      "amount": 1200,
+      "status": "settled",
+      "date": "2026-05-28",
+      "notes": "May balancing settlement done via GPay",
+      "settledAt": "2026-06-14T13:41:00.264Z"
+    }
+  ],
+  "whatsappChat": [
+    {
+      "id": "chat-1",
+      "sender": "bot",
+      "text": "Hello Mehta Family! I am FamBudget, your automated Expense Agent. 🤖📱\n\nSend me text like \"Paid ₹850 for vegetables\" or drop any mobile transaction screenshot (GPay, PhonePe, Paytm, etc.) right here to instantly log expenses!",
+      "timestamp": "2026-06-14T13:41:00.264Z"
+    }
+  ]
+}

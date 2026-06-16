@@ -1,0 +1,6 @@
+{
+  "name": "Family Expense & Settlement",
+  "description": "A private family expense manager, OCR receipt processor, and WhatsApp-style settlement helper for family groups.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
