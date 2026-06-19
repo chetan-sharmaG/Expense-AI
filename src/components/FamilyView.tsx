@@ -5,14 +5,15 @@
 
 import React, { useState } from 'react';
 import { DBState, Group, User } from '../types';
-import { Users, Layers, Plus, Trash2, Shield, Mail, ArrowRight, UserPlus, Info } from 'lucide-react';
+import { Users, Layers, Plus, Trash2, Shield, Mail, ArrowRight, UserPlus, Info, Pencil, X } from 'lucide-react';
 
 interface FamilyViewProps {
   state: DBState;
   onAddGroup: (name: string) => Promise<void>;
   onDeleteGroup: (id: string) => Promise<void>;
-  onAddUser: (user: { name: string; email: string; groupId: string; role: 'admin' | 'member' }) => Promise<void>;
+  onAddUser: (user: { name: string; email: string; groupId: string; role: 'admin' | 'member'; whatsappNumber?: string }) => Promise<void>;
   onDeleteUser: (id: string) => Promise<void>;
+  onUpdateUser: (id: string, updatedPayload: Partial<User>) => Promise<void>;
 }
 
 export default function FamilyView({
@@ -20,7 +21,8 @@ export default function FamilyView({
   onAddGroup,
   onDeleteGroup,
   onAddUser,
-  onDeleteUser
+  onDeleteUser,
+  onUpdateUser
 }: FamilyViewProps) {
   const { family, groups, users } = state;
 
@@ -30,6 +32,15 @@ export default function FamilyView({
   const [userEmail, setUserEmail] = useState('');
   const [userGroupId, setUserGroupId] = useState(groups[0]?.id || '');
   const [userRole, setUserRole] = useState<'admin' | 'member'>('member');
+  const [userWhatsapp, setUserWhatsapp] = useState('');
+
+  // Editing modal states
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editGroupId, setEditGroupId] = useState('');
+  const [editRole, setEditRole] = useState<'admin' | 'member'>('member');
+  const [editWhatsapp, setEditWhatsapp] = useState('');
 
   // Error/Success state helpers
   const [errorMsg, setErrorMsg] = useState('');
@@ -42,6 +53,33 @@ export default function FamilyView({
     setErrorMsg('');
     await onAddGroup(groupName);
     setGroupName('');
+  };
+
+  const handleEditClick = (user: User) => {
+    setEditingUser(user);
+    setEditName(user.name);
+    setEditEmail(user.email);
+    setEditGroupId(user.groupId);
+    setEditRole(user.role);
+    setEditWhatsapp(user.whatsappNumber || '');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setErrorMsg('');
+    try {
+      await onUpdateUser(editingUser.id, {
+        name: editName,
+        email: editEmail,
+        groupId: editGroupId,
+        role: editRole,
+        whatsappNumber: editWhatsapp
+      });
+      setEditingUser(null);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update member profile.');
+    }
   };
 
   // Handle User Creation
@@ -57,11 +95,13 @@ export default function FamilyView({
       name: userName,
       email: userEmail,
       groupId: userGroupId,
-      role: userRole
+      role: userRole,
+      whatsappNumber: userWhatsapp || undefined
     });
 
     setUserName('');
     setUserEmail('');
+    setUserWhatsapp('');
   };
 
   return (
@@ -183,6 +223,18 @@ export default function FamilyView({
                 </select>
               </div>
 
+              <div className="space-y-1">
+                <label htmlFor="input-user-whatsapp" className="text-[10px] uppercase font-bold text-slate-500">WhatsApp Number</label>
+                <input 
+                  type="text" 
+                  id="input-user-whatsapp"
+                  value={userWhatsapp}
+                  onChange={(e) => setUserWhatsapp(e.target.value)}
+                  placeholder="e.g. 919876543210"
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 text-slate-100 rounded-lg focus:outline-none focus:border-indigo-500 font-medium"
+                />
+              </div>
+
               <button 
                 type="submit"
                 id="btn-submit-member"
@@ -246,6 +298,11 @@ export default function FamilyView({
                                 <span className="text-[10px] text-slate-500 truncate flex items-center gap-1 mt-0.5">
                                   <Mail className="size-3" /> {member.email}
                                 </span>
+                                {member.whatsappNumber && (
+                                  <span className="text-[10px] text-indigo-400 truncate flex items-center gap-1 mt-0.5 font-semibold">
+                                    <span className="font-bold text-[8px] px-1 bg-indigo-950 border border-indigo-900 text-indigo-400 rounded mr-0.5">WA</span> +{member.whatsappNumber}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -259,6 +316,17 @@ export default function FamilyView({
                                   Member
                                 </span>
                               )}
+
+                              {/* Edit member button */}
+                              <button
+                                type="button"
+                                id={`btn-edit-user-${member.id}`}
+                                onClick={() => handleEditClick(member)}
+                                className="p-1 hover:bg-indigo-950/40 text-slate-400 hover:text-indigo-400 rounded transition cursor-pointer"
+                                title="Edit user profile"
+                              >
+                                <Pencil className="size-3" />
+                              </button>
                               
                               {/* User Delete button */}
                               {users.length > 2 && (
@@ -303,6 +371,105 @@ export default function FamilyView({
         </div>
 
       </div>
+
+      {/* Edit Member Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-850 pb-3">
+              <div className="flex items-center gap-2">
+                <Pencil className="size-4 text-indigo-400" />
+                <h3 className="text-white font-bold text-sm">Edit Family Member</h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setEditingUser(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-850 transition"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500">Name</label>
+                <input 
+                  type="text" 
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 text-slate-100 rounded-lg focus:outline-none focus:border-indigo-500 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500">Email Reference</label>
+                <input 
+                  type="email" 
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 text-slate-100 rounded-lg focus:outline-none focus:border-indigo-500 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500">Group Allocation</label>
+                <select
+                  value={editGroupId}
+                  onChange={(e) => setEditGroupId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-indigo-500 font-medium text-slate-300 font-semibold"
+                  required
+                >
+                  {groups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500">System Role Permission</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-indigo-500 font-semibold text-slate-300"
+                  required
+                >
+                  <option value="member">Regular Split contributor</option>
+                  <option value="admin">System Admin reviewer</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500">WhatsApp Number</label>
+                <input 
+                  type="text" 
+                  value={editWhatsapp}
+                  onChange={(e) => setEditWhatsapp(e.target.value)}
+                  placeholder="e.g. 919876543210"
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 text-slate-100 rounded-lg focus:outline-none focus:border-indigo-500 font-medium"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 py-2 bg-slate-850 hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold cursor-pointer transition text-center"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-750 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-sm transition text-center"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

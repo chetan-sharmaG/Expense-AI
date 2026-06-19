@@ -230,7 +230,7 @@ export default function App() {
     }
   };
 
-  const handleAddUser = async (userPayload: { name: string; email: string; groupId: string; role: 'admin' | 'member' }) => {
+  const handleAddUser = async (userPayload: { name: string; email: string; groupId: string; role: 'admin' | 'member'; whatsappNumber?: string }) => {
     try {
       const res = await fetchWithAuth('/api/users', {
         method: 'POST',
@@ -243,6 +243,20 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleUpdateUser = async (id: string, updatedPayload: Partial<User>) => {
+    const res = await fetchWithAuth(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedPayload)
+    });
+    const body = await res.json();
+    if (res.ok && body.success) {
+      setDbState(body.state);
+    } else {
+      throw new Error(body.error || 'Failed to update user profile.');
     }
   };
 
@@ -780,6 +794,7 @@ export default function App() {
             onDeleteGroup={handleDeleteGroup}
             onAddUser={handleAddUser}
             onDeleteUser={handleDeleteUser}
+            onUpdateUser={handleUpdateUser}
           />
         )}
 

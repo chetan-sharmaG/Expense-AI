@@ -24,7 +24,8 @@ import {
   ExpenseModel,
   SettlementModel,
   WhatsAppChatModel,
-  AdvisorChatModel
+  AdvisorChatModel,
+  WhatsAppSessionModel
 } from './src/models';
 
 export const app = express();
@@ -298,7 +299,7 @@ app.delete('/api/groups/:id', authenticateJWT, async (req: any, res) => {
 });
 
 app.post('/api/users', authenticateJWT, async (req: any, res) => {
-  const { name, email, groupId, role } = req.body;
+  const { name, email, groupId, role, whatsappNumber } = req.body;
   if (!name || !email || !groupId) {
     return res.status(400).json({ error: 'Missing user parameters' });
   }
@@ -306,6 +307,16 @@ app.post('/api/users', authenticateJWT, async (req: any, res) => {
   try {
     const userExists = await UserModel.findOne({ email: email.toLowerCase() });
     if (userExists) return res.status(400).json({ error: 'Email already registered' });
+
+    // Normalize whatsappNumber if provided (remove all non-digits)
+    const cleanWhatsapp = whatsappNumber ? whatsappNumber.replace(/\D/g, '') : undefined;
+
+    if (cleanWhatsapp) {
+      const existingUser = await UserModel.findOne({ whatsappNumber: cleanWhatsapp });
+      if (existingUser) {
+        return res.status(400).json({ error: `WhatsApp number is already linked to ${existingUser.name}` });
+      }
+    }
 
     // Hash a placeholder password since administrative onboard does not require immediate password fill
     const salt = await bcrypt.genSalt(10);
@@ -317,13 +328,51 @@ app.post('/api/users', authenticateJWT, async (req: any, res) => {
       email: email.toLowerCase(),
       password: placeHash,
       groupId,
-      role: role || 'member'
+      role: role || 'member',
+      whatsappNumber: cleanWhatsapp
     });
 
     const state = await getDBState(req.user.id);
     res.json({ success: true, user: newUser, state });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to create user', message: err.message });
+  }
+});
+
+app.put('/api/users/:id', authenticateJWT, async (req: any, res) => {
+  const { id } = req.params;
+  const { name, email, groupId, role, whatsappNumber } = req.body;
+
+  try {
+    const user = await UserModel.findOne({ id });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Normalize whatsappNumber if provided (remove all non-digits)
+    const cleanWhatsapp = whatsappNumber ? whatsappNumber.replace(/\D/g, '') : undefined;
+
+    // Check if whatsappNumber is already linked to another user
+    if (cleanWhatsapp) {
+      const existingUser = await UserModel.findOne({
+        id: { $ne: id },
+        whatsappNumber: cleanWhatsapp
+      });
+      if (existingUser) {
+        return res.status(400).json({ error: `WhatsApp number is already linked to ${existingUser.name}` });
+      }
+    }
+
+    await UserModel.updateOne({ id }, {
+      name: name !== undefined ? name : user.name,
+      email: email !== undefined ? email.toLowerCase() : user.email,
+      groupId: groupId !== undefined ? groupId : user.groupId,
+      role: role !== undefined ? role : user.role,
+      whatsappNumber: whatsappNumber !== undefined ? cleanWhatsapp : user.whatsappNumber
+    });
+
+    const state = await getDBState(req.user.id);
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update member profile', message: err.message });
   }
 });
 
@@ -489,8 +538,170 @@ app.post('/api/ocr', authenticateJWT, async (req, res) => {
 });
 
 // WhatsApp Bot Chat Integration via AI Simulator
+// WhatsApp AI Parsing helper
+async function parseExpenseWithAi(text?: string, base64Image?: string, senderUser?: any) {
+  const today = new Date().toISOString().split('T')[0];
+  const ai = getAiClient();
+  
+  const [groupsList, usersList] = await Promise.all([
+    GroupModel.find(),
+    UserModel.find()
+  ]);
+
+  const groupsString = groupsList.map(g => `Group ID: ${g.id}, Name: ${g.name}`).join('\n');
+  const usersString = usersList.map(u => `User Name: ${u.name}, ID: ${u.id}, Group: ${u.groupId}`).join('\n');
+  const categoriesList = ['Rent & Living', 'Utilities', 'Groceries', 'Vegetables & Fruits', 'Dining Out', 'Medical', 'Shopping', 'Travel & Commute', 'Others'];
+
+  const userGroup = senderUser ? groupsList.find(g => g.id === senderUser.groupId) : null;
+  const senderName = senderUser ? senderUser.name : 'Unknown User';
+
+  let contents: any[] = [];
+  if (base64Image) {
+    const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
+    contents.push({
+      inlineData: {
+        mimeType: 'image/png',
+        data: base64Data
+      }
+    });
+  }
+
+  const aiPrompt = `
+    You are "FamBudget Bot", an automated Indian WhatsApp bot assistant for private family budget Logging.
+    Current Date Today: ${today}
+    
+    FAMILY GROUPS:
+    ${groupsString}
+    
+    FAMILY MEMBERS AVAILABLE:
+    ${usersString}
+    
+    STANDARD CATEGORIES:
+    ${categoriesList.join(', ')}
+    
+    Current User Sender: User ${senderName} (belongs to group ${userGroup?.name || 'Unknown'}).
+    
+    Your goal:
+    1. Interpret the user text "${text || 'payment receipt screenshot'}" and parse if it's an expense log.
+    2. If it is an expense:
+       - Extract Amount (in INR, numbers), Merchant (Store name), Date (YYYY-MM-DD or today), Category, Notes.
+       - Identify who paid. (Usually the sender: "${senderName}", unless specified otherwise in the text e.g., "Amit paid ₹300").
+       - Map the "groupId" to the group of the person who paid.
+    3. Format a lovely friendly Indian WhatsApp bot response. Use emojis (📱, 💰, 🤖, etc.), bold styling e.g., *bold text* like standard WhatsApp formatting.
+    4. If crucial info like amount is missing, politely ask the user for it in a chat reply.
+    5. Outputs structure in raw JSON matching:
+    {
+      "reply": "Friendly WhatsApp bot message",
+      "expenseProposed": {
+        "amount": number,
+        "category": "string",
+        "paidBy": "usr-id-of-person-who-paid",
+        "groupId": "group-id-of-person-who-paid",
+        "date": "YYYY-MM-DD",
+        "merchant": "string",
+        "notes": "string"
+      } | null,
+      "needsConfirmation": boolean
+    }
+  `;
+  contents.push({ text: aiPrompt });
+
+  const aiResponse = await ai.models.generateContent({
+    model: 'gemini-3.5-flash',
+    contents,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        required: ['reply', 'expenseProposed', 'needsConfirmation'],
+        properties: {
+          reply: { type: Type.STRING },
+          expenseProposed: {
+            type: Type.OBJECT,
+            properties: {
+              amount: { type: Type.NUMBER },
+              category: { type: Type.STRING },
+              paidBy: { type: Type.STRING },
+              groupId: { type: Type.STRING },
+              date: { type: Type.STRING },
+              merchant: { type: Type.STRING },
+              notes: { type: Type.STRING }
+            }
+          },
+          needsConfirmation: { type: Type.BOOLEAN }
+        }
+      }
+    }
+  });
+
+  return JSON.parse(aiResponse.text || '{}');
+}
+
+// WhatsApp Real Webhook Helpers
+async function downloadWhatsAppMedia(mediaId: string): Promise<string> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!token) throw new Error('WHATSAPP_ACCESS_TOKEN is not configured');
+
+  const mediaUrlRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  if (!mediaUrlRes.ok) {
+    const err = await mediaUrlRes.text();
+    throw new Error(`Failed to fetch media metadata: ${err}`);
+  }
+  const mediaData = await mediaUrlRes.json();
+  const fileUrl = mediaData.url;
+
+  const fileRes = await fetch(fileUrl, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  if (!fileRes.ok) {
+    const err = await fileRes.text();
+    throw new Error(`Failed to download media file: ${err}`);
+  }
+
+  const arrayBuffer = await fileRes.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return `data:${mediaData.mime_type};base64,${buffer.toString('base64')}`;
+}
+
+async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneNumberId) {
+    console.warn('[WhatsApp] WhatsApp tokens or Phone Number ID not configured.');
+    return;
+  }
+
+  const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'text',
+    text: { body: text }
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[WhatsApp] Failed to send message to ${to}:`, errText);
+  } else {
+    console.log(`[WhatsApp] Message successfully sent to ${to}`);
+  }
+}
+
+// Simulated WhatsApp context
 let whatsappContext: any = null;
 
+// Simulated WhatsApp bot chat route
 app.post('/api/whatsapp/message', authenticateJWT, async (req: any, res) => {
   const { text, base64Image, senderName } = req.body;
   if (!text && !base64Image) {
@@ -505,23 +716,16 @@ app.post('/api/whatsapp/message', authenticateJWT, async (req: any, res) => {
     await WhatsAppChatModel.create({
       id: `usr-msg-${Date.now()}`,
       sender: 'user',
+      senderName: user.name,
       text: text || 'Uploaded an image 📁',
       timestamp: new Date().toISOString(),
       image: base64Image
     });
 
-    const today = new Date().toISOString().split('T')[0];
-    const ai = getAiClient();
-    
     const [groupsList, usersList] = await Promise.all([
       GroupModel.find(),
       UserModel.find()
     ]);
-
-    const groupsString = groupsList.map(g => `Group ID: ${g.id}, Name: ${g.name}`).join('\n');
-    const usersString = usersList.map(u => `User Name: ${u.name}, ID: ${u.id}, Group: ${u.groupId}`).join('\n');
-    const categoriesList = ['Rent & Living', 'Utilities', 'Groceries', 'Vegetables & Fruits', 'Dining Out', 'Medical', 'Shopping', 'Travel & Commute', 'Others'];
-
     const userGroup = groupsList.find(g => g.id === user.groupId);
 
     // If confirming a pending proposal
@@ -543,10 +747,12 @@ app.post('/api/whatsapp/message', authenticateJWT, async (req: any, res) => {
         createdAt: new Date().toISOString()
       });
 
+      const confirmText = `✅ *Expense Confirmed and Logged!* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant}\n🏷️ *Category:* ${exp.category}\n👤 *Paid By:* ${spender.name} (${spenderGroup?.name})\n📅 *Date:* ${exp.date}\n📝 *Notes:* ${exp.notes}\n\nAll family dashboards updated in real time! 🚀`;
+
       await WhatsAppChatModel.create({
         id: `bot-msg-${Date.now()}`,
         sender: 'bot',
-        text: `✅ *Expense Confirmed and Logged!* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant}\n🏷️ *Category:* ${exp.category}\n👤 *Paid By:* ${spender.name} (${spenderGroup?.name})\n📅 *Date:* ${exp.date}\n📝 *Notes:* ${exp.notes}\n\nAll family dashboards updated in real time! 🚀`,
+        text: confirmText,
         timestamp: new Date().toISOString()
       });
 
@@ -555,87 +761,9 @@ app.post('/api/whatsapp/message', authenticateJWT, async (req: any, res) => {
       return res.json(state);
     }
 
-    let contents: any[] = [];
-    if (base64Image) {
-      const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
-      contents.push({
-        inlineData: {
-          mimeType: 'image/png',
-          data: base64Data
-        }
-      });
-    }
+    // Call reusable AI parser helper
+    const parsedResult = await parseExpenseWithAi(text, base64Image, user);
 
-    const aiPrompt = `
-      You are "FamBudget Bot", an automated Indian WhatsApp bot assistant for private family budget Logging.
-      Current Date Today: ${today}
-      
-      FAMILY GROUPS:
-      ${groupsString}
-      
-      FAMILY MEMBERS AVAILABLE:
-      ${usersString}
-      
-      STANDARD CATEGORIES:
-      ${categoriesList.join(', ')}
-      
-      Current User Sender: User ${user.name} (belongs to group ${userGroup?.name}).
-      
-      Your goal:
-      1. Interpret the user text "${text || 'payment receipt screenshot'}" and parse if it's an expense log.
-      2. If it is an expense:
-         - Extract Amount (in INR, numbers), Merchant (Store name), Date (YYYY-MM-DD or today), Category, Notes.
-         - Identify who paid. (Usually the sender: "${user.name}", unless specified otherwise in the text e.g., "Amit paid ₹300").
-         - Map the "groupId" to the group of the person who paid.
-      3. Format a lovely friendly Indian WhatsApp bot response. Use emojis (📱, 💰, 🤖, etc.), bold styling e.g., *bold text* like standard WhatsApp formatting.
-      4. If crucial info like amount is missing, politely ask the user for it in a chat reply.
-      5. Outputs structure in raw JSON matching:
-      {
-        "reply": "Friendly WhatsApp bot message",
-        "expenseProposed": {
-          "amount": number,
-          "category": "string",
-          "paidBy": "usr-id-of-person-who-paid",
-          "groupId": "group-id-of-person-who-paid",
-          "date": "YYYY-MM-DD",
-          "merchant": "string",
-          "notes": "string"
-        } | null,
-        "needsConfirmation": boolean
-      }
-    `;
-    contents.push({ text: aiPrompt });
-
-    const aiResponse = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ['reply', 'expenseProposed', 'needsConfirmation'],
-          properties: {
-            reply: { type: Type.STRING },
-            expenseProposed: {
-              type: Type.OBJECT,
-              properties: {
-                amount: { type: Type.NUMBER },
-                category: { type: Type.STRING },
-                paidBy: { type: Type.STRING },
-                groupId: { type: Type.STRING },
-                date: { type: Type.STRING },
-                merchant: { type: Type.STRING },
-                notes: { type: Type.STRING }
-              }
-            },
-            needsConfirmation: { type: Type.BOOLEAN }
-          }
-        }
-      }
-    });
-
-    const parsedResult = JSON.parse(aiResponse.text || '{}');
-    
     if (parsedResult.expenseProposed && parsedResult.needsConfirmation) {
       whatsappContext = {
         ...parsedResult.expenseProposed,
@@ -665,6 +793,159 @@ app.post('/api/whatsapp/message', authenticateJWT, async (req: any, res) => {
     });
     const state = await getDBState(req.user.id);
     res.json(state);
+  }
+});
+
+// Real WhatsApp Webhook Verification Endpoint
+app.get('/api/whatsapp/webhook', (req, res) => {
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'verify_token_default';
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === verifyToken) {
+    console.log('[WhatsApp Webhook] Verification successful.');
+    return res.status(200).send(challenge);
+  } else {
+    console.warn('[WhatsApp Webhook] Verification failed.');
+    return res.sendStatus(403);
+  }
+});
+
+// Real WhatsApp Webhook Event Notifications Receiver Endpoint
+app.post('/api/whatsapp/webhook', async (req, res) => {
+  // Always respond with 200 OK immediately to Meta
+  res.status(200).send('EVENT_RECEIVED');
+
+  const { body } = req;
+  if (body.object !== 'whatsapp_business_account') return;
+
+  try {
+    const entry = body.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
+    const message = value?.messages?.[0];
+
+    if (!message) return;
+
+    const from = message.from;
+    const text = message.text?.body;
+    const type = message.type;
+    let base64Image: string | undefined;
+
+    console.log(`[WhatsApp Webhook] Incoming message from ${from} of type ${type}`);
+
+    // Find linked user profile by phone number (removing non-digits)
+    const cleanFrom = from.replace(/\D/g, '');
+    const user = await UserModel.findOne({
+      whatsappNumber: { $regex: new RegExp(`^${cleanFrom}$`) }
+    });
+
+    if (!user) {
+      console.warn(`[WhatsApp Webhook] Unlinked phone number: ${from}`);
+      await sendWhatsAppMessage(
+        from,
+        `⚠️ *Welcome to FamilyFunds!* \n\nYour WhatsApp number is not linked to any member profile in our system. \n\n👉 Please log in to the FamilyFunds app, navigate to the *Family & Groups* settings, and link this phone number (*${from}*) to your profile to enable automatic expense logging! 🚀`
+      );
+      return;
+    }
+
+    // Log the user message to simulator chat history
+    await WhatsAppChatModel.create({
+      id: `real-usr-msg-${Date.now()}`,
+      sender: 'user',
+      senderName: user.name,
+      text: text || `Sent an attachment [${type}] 📁`,
+      timestamp: new Date().toISOString()
+    });
+
+    // Check if there is an active confirmation session
+    const session = await WhatsAppSessionModel.findOne({ phoneNumber: cleanFrom });
+
+    // Handle confirmation response
+    if (session && text && /^(yes|yeah|yup|y|confirm|ok|okay|save|correct|agree|indeed)/i.test(text.trim())) {
+      const exp = session.pendingExpense;
+      if (exp) {
+        await ExpenseModel.create({
+          id: `exp-${Date.now()}`,
+          amount: exp.amount,
+          category: exp.category || 'Uncategorized',
+          paidBy: exp.paidBy,
+          groupId: exp.groupId,
+          date: exp.date,
+          notes: exp.notes,
+          merchant: exp.merchant,
+          originalImage: exp.originalImage,
+          createdAt: new Date().toISOString()
+        });
+
+        await WhatsAppSessionModel.deleteOne({ phoneNumber: cleanFrom });
+
+        const replyText = `✅ *Expense Confirmed and Logged!* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant}\n🏷️ *Category:* ${exp.category}\n👤 *Paid By:* ${user.name}\n📅 *Date:* ${exp.date}\n📝 *Notes:* ${exp.notes}\n\nFamily ledger updated successfully! 🚀`;
+        
+        await sendWhatsAppMessage(from, replyText);
+
+        await WhatsAppChatModel.create({
+          id: `real-bot-msg-${Date.now()}`,
+          sender: 'bot',
+          text: replyText,
+          timestamp: new Date().toISOString()
+        });
+      }
+      return;
+    }
+
+    // Download image if type is image
+    if (type === 'image' && message.image?.id) {
+      try {
+        base64Image = await downloadWhatsAppMedia(message.image.id);
+      } catch (err: any) {
+        console.error('[WhatsApp Webhook] Image download failure:', err);
+        await sendWhatsAppMessage(from, '❌ Failed to process the uploaded image receipt. Please try sending a plain text description.');
+        return;
+      }
+    }
+
+    // Process using AI expense parser
+    const parsedResult = await parseExpenseWithAi(text, base64Image, user);
+
+    // Save/Clear confirmation session
+    if (parsedResult.expenseProposed && parsedResult.needsConfirmation) {
+      await WhatsAppSessionModel.updateOne(
+        { phoneNumber: cleanFrom },
+        {
+          phoneNumber: cleanFrom,
+          pendingExpense: {
+            amount: parsedResult.expenseProposed.amount,
+            category: parsedResult.expenseProposed.category,
+            paidBy: user.id,
+            groupId: user.groupId,
+            date: parsedResult.expenseProposed.date || new Date().toISOString().split('T')[0],
+            notes: parsedResult.expenseProposed.notes || '',
+            merchant: parsedResult.expenseProposed.merchant || 'Unknown Merchant',
+            originalImage: base64Image
+          },
+          updatedAt: new Date().toISOString()
+        },
+        { upsert: true }
+      );
+    } else {
+      await WhatsAppSessionModel.deleteOne({ phoneNumber: cleanFrom });
+    }
+
+    // Send reply via WhatsApp
+    await sendWhatsAppMessage(from, parsedResult.reply);
+
+    // Log bot reply to simulator history
+    await WhatsAppChatModel.create({
+      id: `real-bot-msg-${Date.now()}`,
+      sender: 'bot',
+      text: parsedResult.reply,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error: any) {
+    console.error('[WhatsApp Webhook] Fatal error processing event:', error);
   }
 });
 

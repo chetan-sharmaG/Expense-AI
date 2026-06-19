@@ -21,6 +21,22 @@ export interface IUser extends Document {
   password: string;
   groupId: string;
   role: 'admin' | 'member';
+  whatsappNumber?: string;
+}
+
+export interface IWhatsAppSession extends Document {
+  phoneNumber: string;
+  pendingExpense: {
+    amount: number;
+    category: string;
+    paidBy: string;
+    groupId: string;
+    date: string;
+    notes: string;
+    merchant: string;
+    originalImage?: string;
+  } | null;
+  updatedAt: string;
 }
 
 export interface IExpense extends Document {
@@ -91,12 +107,13 @@ export const GroupModel = getModel<IGroup>('Group', GroupSchema);
 
 // 3. User Schema (with secure password hashed storage support)
 const UserSchema = new Schema<IUser>({
-  id:       { type: String, required: true, unique: true },
-  name:     { type: String, required: true },
-  email:    { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  groupId:  { type: String, required: true },
-  role:     { type: String, enum: ['admin', 'member'], default: 'member' }
+  id:             { type: String, required: true, unique: true },
+  name:           { type: String, required: true },
+  email:          { type: String, required: true, unique: true },
+  password:       { type: String, required: true },
+  groupId:        { type: String, required: true },
+  role:           { type: String, enum: ['admin', 'member'], default: 'member' },
+  whatsappNumber: { type: String, sparse: true, unique: true }
 });
 export const UserModel = getModel<IUser>('User', UserSchema);
 
@@ -149,3 +166,20 @@ const AdvisorChatSchema = new Schema<IAdvisorChat>({
   timestamp: { type: String, required: true }
 });
 export const AdvisorChatModel = getModel<IAdvisorChat>('AdvisorChat', AdvisorChatSchema);
+
+// 8. WhatsApp Confirmation Session Schema
+const WhatsAppSessionSchema = new Schema<IWhatsAppSession>({
+  phoneNumber:    { type: String, required: true, unique: true },
+  pendingExpense: {
+    amount:        { type: Number },
+    category:      { type: String },
+    paidBy:        { type: String },
+    groupId:       { type: String },
+    date:          { type: String },
+    notes:         { type: String },
+    merchant:      { type: String },
+    originalImage: { type: String }
+  },
+  updatedAt:      { type: String, required: true }
+});
+export const WhatsAppSessionModel = getModel<IWhatsAppSession>('WhatsAppSession', WhatsAppSessionSchema);

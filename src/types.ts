@@ -21,6 +21,7 @@ export interface User {
   email: string;
   groupId: string; // ID of the belonging group
   role: 'admin' | 'member';
+  whatsappNumber?: string;
 }
 
 export interface Expense {
