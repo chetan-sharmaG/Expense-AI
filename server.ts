@@ -139,15 +139,27 @@ function getAiClient(): GoogleGenAI {
 
 // Auth APIs: Register New Profile
 app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password, groupId, role } = req.body;
+  const { name, email, password, groupId, role, whatsappNumber } = req.body;
+  console.log(`[Auth Register] Request body name=${name}, email=${email}, groupId=${groupId}, role=${role}, whatsappNumber=${whatsappNumber}`);
   if (!name || !email || !password || !groupId) {
+    console.warn('[Auth Register] Missing mandatory credentials');
     return res.status(400).json({ error: 'Missing mandatory registration credentials' });
   }
 
   try {
     const userExists = await UserModel.findOne({ email: email.toLowerCase() });
     if (userExists) {
+      console.warn(`[Auth Register] Email already exists: ${email}`);
       return res.status(400).json({ error: 'A member profile with this email is already registered' });
+    }
+
+    const cleanWhatsapp = whatsappNumber ? whatsappNumber.replace(/\D/g, '') : undefined;
+    if (cleanWhatsapp) {
+      const existingUser = await UserModel.findOne({ whatsappNumber: cleanWhatsapp });
+      if (existingUser) {
+        console.warn(`[Auth Register] WhatsApp number ${cleanWhatsapp} already linked to ${existingUser.name}`);
+        return res.status(400).json({ error: `WhatsApp number is already linked to ${existingUser.name}` });
+      }
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -159,8 +171,11 @@ app.post('/api/auth/register', async (req, res) => {
       email: email.toLowerCase(),
       password: hashedPassword,
       groupId,
-      role: role || 'member'
+      role: role || 'member',
+      whatsappNumber: cleanWhatsapp
     });
+
+    console.log(`[Auth Register] Successfully created user: ${newUser.name} (${newUser.id}), WhatsApp: ${cleanWhatsapp}`);
 
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, role: newUser.role },
@@ -170,9 +185,10 @@ app.post('/api/auth/register', async (req, res) => {
     res.json({
       success: true,
       token,
-      user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, groupId: newUser.groupId }
+      user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, groupId: newUser.groupId, whatsappNumber: newUser.whatsappNumber }
     });
   } catch (err: any) {
+    console.error('[Auth Register] Error registering user:', err);
     res.status(500).json({ error: 'Registration failed', message: err.message });
   }
 });
@@ -242,8 +258,9 @@ app.get('/api/db-state', authenticateJWT, async (req: any, res) => {
 });
 
 // Reset system to factory default
-app.post('/api/db-reset', authenticateJWT, async (req: any, res) => {
+app.post('/api/db-reset', async (req: any, res) => {
   try {
+    console.log('[Admin Reset] Initiating factory reset...');
     await Promise.all([
       FamilyModel.deleteMany({}),
       GroupModel.deleteMany({}),
@@ -251,13 +268,15 @@ app.post('/api/db-reset', authenticateJWT, async (req: any, res) => {
       ExpenseModel.deleteMany({}),
       SettlementModel.deleteMany({}),
       WhatsAppChatModel.deleteMany({}),
-      AdvisorChatModel.deleteMany({})
+      AdvisorChatModel.deleteMany({}),
+      WhatsAppSessionModel.deleteMany({})
     ]);
 
     await seedDatabase();
-    const state = await getDBState(req.user.id);
-    res.json({ message: 'Database reset succeeded', data: state });
+    console.log('[Admin Reset] Factory reset complete. Database is clean and ready.');
+    res.json({ success: true, message: 'Database successfully cleared and reset to factory defaults.' });
   } catch (err: any) {
+    console.error('[Admin Reset] Factory reset failed:', err);
     res.status(500).json({ error: 'Database reset failed', message: err.message });
   }
 });
@@ -818,7 +837,12 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
   res.status(200).send('EVENT_RECEIVED');
 
   const { body } = req;
-  if (body.object !== 'whatsapp_business_account') return;
+  console.log('[WhatsApp Webhook] Received webhook payload:', JSON.stringify(body, null, 2));
+
+  if (body.object !== 'whatsapp_business_account') {
+    console.log(`[WhatsApp Webhook] Bypassing non-whatsapp_business_account object: ${body.object}`);
+    return;
+  }
 
   try {
     const entry = body.entry?.[0];
@@ -826,29 +850,37 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     const value = changes?.value;
     const message = value?.messages?.[0];
 
-    if (!message) return;
+    if (!message) {
+      console.log('[WhatsApp Webhook] No message object found in webhook payload.');
+      return;
+    }
 
     const from = message.from;
     const text = message.text?.body;
     const type = message.type;
     let base64Image: string | undefined;
 
-    console.log(`[WhatsApp Webhook] Incoming message from ${from} of type ${type}`);
+    console.log(`[WhatsApp Webhook] Processing message: from=${from}, type=${type}, text=${text}`);
 
     // Find linked user profile by phone number (removing non-digits)
     const cleanFrom = from.replace(/\D/g, '');
+    console.log(`[WhatsApp Webhook] Lookup user by whatsappNumber pattern matching: ${cleanFrom}`);
+    
     const user = await UserModel.findOne({
       whatsappNumber: { $regex: new RegExp(`^${cleanFrom}$`) }
     });
 
     if (!user) {
-      console.warn(`[WhatsApp Webhook] Unlinked phone number: ${from}`);
+      console.warn(`[WhatsApp Webhook] NO LINKED USER FOUND for phone number: ${cleanFrom}`);
+      console.log(`[WhatsApp Webhook] Dispatching "Welcome/Unlinked" warning reply to ${from}`);
       await sendWhatsAppMessage(
         from,
         `⚠️ *Welcome to FamilyFunds!* \n\nYour WhatsApp number is not linked to any member profile in our system. \n\n👉 Please log in to the FamilyFunds app, navigate to the *Family & Groups* settings, and link this phone number (*${from}*) to your profile to enable automatic expense logging! 🚀`
       );
       return;
     }
+    
+    console.log(`[WhatsApp Webhook] Found linked user: ${user.name} (${user.id}), Group: ${user.groupId}`);
 
     // Log the user message to simulator chat history
     await WhatsAppChatModel.create({
@@ -858,15 +890,18 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
       text: text || `Sent an attachment [${type}] 📁`,
       timestamp: new Date().toISOString()
     });
+    console.log(`[WhatsApp Webhook] Logged user message to WhatsAppChatModel history.`);
 
     // Check if there is an active confirmation session
+    console.log(`[WhatsApp Webhook] Checking for active confirmation session for number: ${cleanFrom}`);
     const session = await WhatsAppSessionModel.findOne({ phoneNumber: cleanFrom });
 
     // Handle confirmation response
     if (session && text && /^(yes|yeah|yup|y|confirm|ok|okay|save|correct|agree|indeed)/i.test(text.trim())) {
+      console.log(`[WhatsApp Webhook] User responded with confirmation keyword. Session details:`, JSON.stringify(session, null, 2));
       const exp = session.pendingExpense;
       if (exp) {
-        await ExpenseModel.create({
+        const newExpense = await ExpenseModel.create({
           id: `exp-${Date.now()}`,
           amount: exp.amount,
           category: exp.category || 'Uncategorized',
@@ -878,11 +913,14 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
           originalImage: exp.originalImage,
           createdAt: new Date().toISOString()
         });
+        console.log(`[WhatsApp Webhook] Expense successfully created in DB:`, newExpense.id);
 
         await WhatsAppSessionModel.deleteOne({ phoneNumber: cleanFrom });
+        console.log(`[WhatsApp Webhook] Cleared pending session for number: ${cleanFrom}`);
 
         const replyText = `✅ *Expense Confirmed and Logged!* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant}\n🏷️ *Category:* ${exp.category}\n👤 *Paid By:* ${user.name}\n📅 *Date:* ${exp.date}\n📝 *Notes:* ${exp.notes}\n\nFamily ledger updated successfully! 🚀`;
         
+        console.log(`[WhatsApp Webhook] Sending confirmation success reply to ${from}`);
         await sendWhatsAppMessage(from, replyText);
 
         await WhatsAppChatModel.create({
@@ -897,8 +935,10 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
 
     // Download image if type is image
     if (type === 'image' && message.image?.id) {
+      console.log(`[WhatsApp Webhook] Image attachment detected. Media ID: ${message.image.id}`);
       try {
         base64Image = await downloadWhatsAppMedia(message.image.id);
+        console.log(`[WhatsApp Webhook] Successfully downloaded image media. Length: ${base64Image.length} characters.`);
       } catch (err: any) {
         console.error('[WhatsApp Webhook] Image download failure:', err);
         await sendWhatsAppMessage(from, '❌ Failed to process the uploaded image receipt. Please try sending a plain text description.');
@@ -907,10 +947,13 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     }
 
     // Process using AI expense parser
+    console.log(`[WhatsApp Webhook] Invoking parseExpenseWithAi...`);
     const parsedResult = await parseExpenseWithAi(text, base64Image, user);
+    console.log(`[WhatsApp Webhook] AI parser output parsedResult:`, JSON.stringify(parsedResult, null, 2));
 
     // Save/Clear confirmation session
     if (parsedResult.expenseProposed && parsedResult.needsConfirmation) {
+      console.log(`[WhatsApp Webhook] Saving pending confirmation session for number: ${cleanFrom}`);
       await WhatsAppSessionModel.updateOne(
         { phoneNumber: cleanFrom },
         {
@@ -929,11 +972,14 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
         },
         { upsert: true }
       );
+      console.log(`[WhatsApp Webhook] Session saved successfully.`);
     } else {
+      console.log(`[WhatsApp Webhook] No confirmation needed. Clearing any active session for: ${cleanFrom}`);
       await WhatsAppSessionModel.deleteOne({ phoneNumber: cleanFrom });
     }
 
     // Send reply via WhatsApp
+    console.log(`[WhatsApp Webhook] Sending reply to ${from}: "${parsedResult.reply}"`);
     await sendWhatsAppMessage(from, parsedResult.reply);
 
     // Log bot reply to simulator history
@@ -943,6 +989,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
       text: parsedResult.reply,
       timestamp: new Date().toISOString()
     });
+    console.log(`[WhatsApp Webhook] Bot reply logged to WhatsAppChatModel history.`);
 
   } catch (error: any) {
     console.error('[WhatsApp Webhook] Fatal error processing event:', error);

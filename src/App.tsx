@@ -54,6 +54,7 @@ export default function App() {
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regGroupId, setRegGroupId] = useState('');
+  const [regWhatsapp, setRegWhatsapp] = useState('');
 
   // Public dynamic database config states
   const [publicGroups, setPublicGroups] = useState<any[]>([]);
@@ -161,7 +162,8 @@ export default function App() {
           email: regEmail,
           password: regPassword,
           groupId: regGroupId,
-          role: 'member'
+          role: 'member',
+          whatsappNumber: regWhatsapp || undefined
         })
       });
       const data = await res.json();
@@ -525,6 +527,17 @@ export default function App() {
                     <option key={g.id} value={g.id}>{g.name}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-bold text-slate-400">WhatsApp Number (Optional)</label>
+                <input 
+                  type="text" 
+                  value={regWhatsapp}
+                  onChange={(e) => setRegWhatsapp(e.target.value)}
+                  placeholder="e.g. 919876543210 (with country code)"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 text-slate-150 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-semibold"
+                />
               </div>
 
               <button 
