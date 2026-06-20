@@ -677,7 +677,7 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<string> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   if (!token) throw new Error('WHATSAPP_ACCESS_TOKEN is not configured');
 
-  const mediaUrlRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
+  const mediaUrlRes = await fetch(`https://graph.facebook.com/v23.0/${mediaId}`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   if (!mediaUrlRes.ok) {
@@ -708,7 +708,7 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     return;
   }
 
-  const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`;
   const payload = {
     messaging_product: 'whatsapp',
     to,
@@ -730,6 +730,42 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     console.error(`[WhatsApp] Failed to send message to ${to}:`, errText);
   } else {
     console.log(`[WhatsApp] Message successfully sent to ${to}`);
+  }
+}
+
+async function sendTypingIndicator(to: string, messageId: string): Promise<void> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!token || !phoneNumberId) return;
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          status: 'read',
+          message_id: messageId,
+          typing_indicator: {
+            type: 'text'
+          }
+        })
+      }
+    );
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[WhatsApp Typing Indicator] API returned non-200 status:`, errText);
+    } else {
+      console.log(`[WhatsApp Typing Indicator] Sent successfully to ${to}`);
+    }
+  } catch (err: any) {
+    console.error(`[WhatsApp Typing Indicator] Failed to send:`, err.message);
   }
 }
 
@@ -885,6 +921,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     }
 
     const from = message.from;
+    const messageId = message.id;
     const text = message.text?.body;
     const type = message.type;
     let base64Image: string | undefined;
@@ -960,6 +997,10 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
         });
       }
       return res.status(200).send('EVENT_RECEIVED');
+    }
+
+    if (messageId) {
+      await sendTypingIndicator(from, messageId);
     }
 
     // Download image if type is image
