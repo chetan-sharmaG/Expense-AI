@@ -1363,6 +1363,26 @@ app.post('/api/test/trigger-reminders', authenticateJWT, async (req: any, res) =
   }
 });
 
+// Public trigger route for local testing or Vercel Cron
+app.all('/api/cron/reminders', async (req: any, res) => {
+  console.log('[Cron Endpoint] Daily reminders cron triggered manually/externally.');
+  try {
+    const now = new Date();
+    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const todayStr = dateFormatter.format(now);
+    await sendDailyWhatsAppReminders(todayStr);
+    res.json({ success: true, message: `Daily WhatsApp reminders triggered successfully for ${todayStr}.` });
+  } catch (err: any) {
+    console.error('[Cron Endpoint] Trigger failed:', err);
+    res.status(500).json({ error: 'Failed to trigger reminders', message: err.message });
+  }
+});
+
 // ------------------- VITE & STATIC HANDLING -------------------
 export async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
