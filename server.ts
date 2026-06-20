@@ -833,15 +833,12 @@ app.get('/api/whatsapp/webhook', (req, res) => {
 
 // Real WhatsApp Webhook Event Notifications Receiver Endpoint
 app.post('/api/whatsapp/webhook', async (req, res) => {
-  // Always respond with 200 OK immediately to Meta
-  res.status(200).send('EVENT_RECEIVED');
-
   const { body } = req;
   console.log('[WhatsApp Webhook] Received webhook payload:', JSON.stringify(body, null, 2));
 
   if (body.object !== 'whatsapp_business_account') {
     console.log(`[WhatsApp Webhook] Bypassing non-whatsapp_business_account object: ${body.object}`);
-    return;
+    return res.status(200).send('EVENT_RECEIVED');
   }
 
   try {
@@ -852,7 +849,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
 
     if (!message) {
       console.log('[WhatsApp Webhook] No message object found in webhook payload.');
-      return;
+      return res.status(200).send('EVENT_RECEIVED');
     }
 
     const from = message.from;
@@ -877,7 +874,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
         from,
         `⚠️ *Welcome to FamilyFunds!* \n\nYour WhatsApp number is not linked to any member profile in our system. \n\n👉 Please log in to the FamilyFunds app, navigate to the *Family & Groups* settings, and link this phone number (*${from}*) to your profile to enable automatic expense logging! 🚀`
       );
-      return;
+      return res.status(200).send('EVENT_RECEIVED');
     }
     
     console.log(`[WhatsApp Webhook] Found linked user: ${user.name} (${user.id}), Group: ${user.groupId}`);
@@ -930,7 +927,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
           timestamp: new Date().toISOString()
         });
       }
-      return;
+      return res.status(200).send('EVENT_RECEIVED');
     }
 
     // Download image if type is image
@@ -942,7 +939,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
       } catch (err: any) {
         console.error('[WhatsApp Webhook] Image download failure:', err);
         await sendWhatsAppMessage(from, '❌ Failed to process the uploaded image receipt. Please try sending a plain text description.');
-        return;
+        return res.status(200).send('EVENT_RECEIVED');
       }
     }
 
@@ -991,8 +988,10 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     });
     console.log(`[WhatsApp Webhook] Bot reply logged to WhatsAppChatModel history.`);
 
+    res.status(200).send('EVENT_RECEIVED');
   } catch (error: any) {
     console.error('[WhatsApp Webhook] Fatal error processing event:', error);
+    res.status(500).send('INTERNAL_SERVER_ERROR');
   }
 });
 
