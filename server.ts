@@ -717,6 +717,42 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   }
 }
 
+async function sendWhatsAppTypingIndicator(to: string): Promise<void> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneNumberId) return;
+
+  const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'typing_indicator',
+    typing_indicator: {
+      type: 'text'
+    }
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[WhatsApp] Typing indicator request returned non-200 status:`, errText);
+    } else {
+      console.log(`[WhatsApp] Typing indicator successfully sent to ${to}`);
+    }
+  } catch (err) {
+    console.error(`[WhatsApp] Failed to send typing indicator to ${to}:`, err);
+  }
+}
+
 // Simulated WhatsApp context
 let whatsappContext: any = null;
 
@@ -894,6 +930,9 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     }
     
     console.log(`[WhatsApp Webhook] Found linked user: ${user.name} (${user.id}), Group: ${user.groupId}`);
+
+    // Trigger Meta WhatsApp typing indicator to user
+    await sendWhatsAppTypingIndicator(from);
 
     // Log the user message to simulator chat history
     await WhatsAppChatModel.create({
