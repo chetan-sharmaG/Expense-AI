@@ -783,11 +783,27 @@ app.post('/api/whatsapp/message', authenticateJWT, async (req: any, res) => {
     // Call reusable AI parser helper
     const parsedResult = await parseExpenseWithAi(text, base64Image, user);
 
-    if (parsedResult.expenseProposed && parsedResult.needsConfirmation) {
-      whatsappContext = {
-        ...parsedResult.expenseProposed,
-        originalImage: base64Image
-      };
+    if (parsedResult.expenseProposed) {
+      if (parsedResult.needsConfirmation) {
+        whatsappContext = {
+          ...parsedResult.expenseProposed,
+          originalImage: base64Image
+        };
+      } else {
+        await ExpenseModel.create({
+          id: `exp-${Date.now()}`,
+          amount: Number(parsedResult.expenseProposed.amount),
+          category: parsedResult.expenseProposed.category || 'Others',
+          paidBy: parsedResult.expenseProposed.paidBy || user.id,
+          groupId: parsedResult.expenseProposed.groupId || user.groupId,
+          date: parsedResult.expenseProposed.date || new Date().toISOString().split('T')[0],
+          notes: parsedResult.expenseProposed.notes || '',
+          merchant: parsedResult.expenseProposed.merchant || 'Unknown Merchant',
+          originalImage: base64Image,
+          createdAt: new Date().toISOString()
+        });
+        whatsappContext = null;
+      }
     } else {
       whatsappContext = null;
     }
@@ -949,29 +965,47 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     console.log(`[WhatsApp Webhook] AI parser output parsedResult:`, JSON.stringify(parsedResult, null, 2));
 
     // Save/Clear confirmation session
-    if (parsedResult.expenseProposed && parsedResult.needsConfirmation) {
-      console.log(`[WhatsApp Webhook] Saving pending confirmation session for number: ${cleanFrom}`);
-      await WhatsAppSessionModel.updateOne(
-        { phoneNumber: cleanFrom },
-        {
-          phoneNumber: cleanFrom,
-          pendingExpense: {
-            amount: parsedResult.expenseProposed.amount,
-            category: parsedResult.expenseProposed.category,
-            paidBy: user.id,
-            groupId: user.groupId,
-            date: parsedResult.expenseProposed.date || new Date().toISOString().split('T')[0],
-            notes: parsedResult.expenseProposed.notes || '',
-            merchant: parsedResult.expenseProposed.merchant || 'Unknown Merchant',
-            originalImage: base64Image
+    if (parsedResult.expenseProposed) {
+      if (parsedResult.needsConfirmation) {
+        console.log(`[WhatsApp Webhook] Saving pending confirmation session for number: ${cleanFrom}`);
+        await WhatsAppSessionModel.updateOne(
+          { phoneNumber: cleanFrom },
+          {
+            phoneNumber: cleanFrom,
+            pendingExpense: {
+              amount: parsedResult.expenseProposed.amount,
+              category: parsedResult.expenseProposed.category,
+              paidBy: user.id,
+              groupId: user.groupId,
+              date: parsedResult.expenseProposed.date || new Date().toISOString().split('T')[0],
+              notes: parsedResult.expenseProposed.notes || '',
+              merchant: parsedResult.expenseProposed.merchant || 'Unknown Merchant',
+              originalImage: base64Image
+            },
+            updatedAt: new Date().toISOString()
           },
-          updatedAt: new Date().toISOString()
-        },
-        { upsert: true }
-      );
-      console.log(`[WhatsApp Webhook] Session saved successfully.`);
+          { upsert: true }
+        );
+        console.log(`[WhatsApp Webhook] Session saved successfully.`);
+      } else {
+        console.log(`[WhatsApp Webhook] No confirmation needed. Creating expense immediately in DB.`);
+        const newExpense = await ExpenseModel.create({
+          id: `exp-${Date.now()}`,
+          amount: Number(parsedResult.expenseProposed.amount),
+          category: parsedResult.expenseProposed.category || 'Others',
+          paidBy: parsedResult.expenseProposed.paidBy || user.id,
+          groupId: parsedResult.expenseProposed.groupId || user.groupId,
+          date: parsedResult.expenseProposed.date || new Date().toISOString().split('T')[0],
+          notes: parsedResult.expenseProposed.notes || '',
+          merchant: parsedResult.expenseProposed.merchant || 'Unknown Merchant',
+          originalImage: base64Image,
+          createdAt: new Date().toISOString()
+        });
+        console.log(`[WhatsApp Webhook] Expense created directly:`, newExpense.id);
+        await WhatsAppSessionModel.deleteOne({ phoneNumber: cleanFrom });
+      }
     } else {
-      console.log(`[WhatsApp Webhook] No confirmation needed. Clearing any active session for: ${cleanFrom}`);
+      console.log(`[WhatsApp Webhook] No expense proposed. Clearing any active session for: ${cleanFrom}`);
       await WhatsAppSessionModel.deleteOne({ phoneNumber: cleanFrom });
     }
 
