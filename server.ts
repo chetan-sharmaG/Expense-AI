@@ -1267,7 +1267,7 @@ app.delete('/api/settlements/:id', authenticateJWT, async (req: any, res) => {
 let lastRunDate: string = '';
 
 export async function sendDailyWhatsAppReminders(todayStr: string) {
-  console.log(`[Reminder Scheduler] Checking daily reminders for date: ${todayStr}`);
+  console.log(`[Reminder Scheduler] Sending daily reminders to all users for date: ${todayStr}`);
   try {
     // 1. Fetch all users with registered WhatsApp numbers
     const users = await UserModel.find({ whatsappNumber: { $exists: true, $ne: '' } });
@@ -1276,33 +1276,23 @@ export async function sendDailyWhatsAppReminders(todayStr: string) {
       return;
     }
 
-    // 2. Fetch all expenses logged today
-    const todayExpenses = await ExpenseModel.find({ date: todayStr });
-    const groupsWithExpenses = new Set(todayExpenses.map(e => e.groupId));
+    console.log(`[Reminder Scheduler] Sending reminders to ${users.length} users.`);
 
-    console.log(`[Reminder Scheduler] Groups that logged expenses today:`, Array.from(groupsWithExpenses));
-
-    // 3. Check each user's group
+    // 2. Send reminders to all users
     for (const user of users) {
-      if (!user.groupId) continue;
+      console.log(`[Reminder Scheduler] Sending WhatsApp reminder to ${user.name} (${user.whatsappNumber})...`);
+      
+      const messageText = `👋 *Hi ${user.name}!* \n\nThis is your daily reminder from *FamBudget Bot*. 🤖📱\n\nIf you spent anything today, reply directly to this chat (e.g. "Spent 600 at Starbucks for coffee today" or attach a transaction screenshot) to log it! 💰💸`;
 
-      if (!groupsWithExpenses.has(user.groupId)) {
-        console.log(`[Reminder Scheduler] Group for ${user.name} (${user.groupId}) has not logged any expense today. Sending WhatsApp reminder to ${user.whatsappNumber}...`);
-        
-        const messageText = `👋 *Hi ${user.name}!* \n\nThis is a friendly reminder from *FamBudget Bot*. 🤖📱\n\nWe noticed that your group hasn't logged any expenses for today yet. If you spent anything today, reply directly to this chat (e.g. "Spent 600 at Starbucks for coffee today" or attach a transaction screenshot) to log it! 💰💸`;
+      await sendWhatsAppMessage(user.whatsappNumber, messageText);
 
-        await sendWhatsAppMessage(user.whatsappNumber, messageText);
-
-        // Also log this outgoing bot message in the WhatsApp Chat history so it shows in the UI
-        await WhatsAppChatModel.create({
-          id: `bot-reminder-${Date.now()}-${user.id}`,
-          sender: 'bot',
-          text: messageText,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        console.log(`[Reminder Scheduler] User ${user.name}'s group (${user.groupId}) already logged expenses today.`);
-      }
+      // Also log this outgoing bot message in the WhatsApp Chat history so it shows in the UI
+      await WhatsAppChatModel.create({
+        id: `bot-reminder-${Date.now()}-${user.id}`,
+        sender: 'bot',
+        text: messageText,
+        timestamp: new Date().toISOString()
+      });
     }
   } catch (err) {
     console.error('[Reminder Scheduler] Error running daily reminders:', err);
