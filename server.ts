@@ -94,8 +94,7 @@ export async function seedDatabase() {
 
     const groups = [
       { id: 'grp-1', name: 'Couple 1 (Naveen & Sneha)', familyId },
-      { id: 'grp-2', name: 'Couple 2 (Chetan & Riyati)', familyId },
-      { id: 'grp-3', name: 'Parents (Papa & Mummy)', familyId }
+      { id: 'grp-2', name: 'Couple 2 (Chetan & Riyati)', familyId }
     ];
     await GroupModel.insertMany(groups);
 
@@ -449,6 +448,13 @@ app.put('/api/expenses/:id', authenticateJWT, async (req: any, res) => {
     const expense = await ExpenseModel.findOne({ id });
     if (!expense) return res.status(404).json({ error: 'Expense not found' });
 
+    const userProfile = await UserModel.findOne({ id: req.user.id });
+    if (!userProfile) return res.status(401).json({ error: 'Unauthorized: Profile not found' });
+
+    if (expense.groupId !== userProfile.groupId) {
+      return res.status(403).json({ error: 'Forbidden: You cannot modify expenses belonging to another couple.' });
+    }
+
     let groupId = expense.groupId;
     if (paidBy) {
       const user = await UserModel.findOne({ id: paidBy });
@@ -475,6 +481,16 @@ app.put('/api/expenses/:id', authenticateJWT, async (req: any, res) => {
 app.delete('/api/expenses/:id', authenticateJWT, async (req: any, res) => {
   const { id } = req.params;
   try {
+    const expense = await ExpenseModel.findOne({ id });
+    if (!expense) return res.status(404).json({ error: 'Expense not found' });
+
+    const userProfile = await UserModel.findOne({ id: req.user.id });
+    if (!userProfile) return res.status(401).json({ error: 'Unauthorized: Profile not found' });
+
+    if (expense.groupId !== userProfile.groupId) {
+      return res.status(403).json({ error: 'Forbidden: You cannot delete expenses belonging to another couple.' });
+    }
+
     await ExpenseModel.deleteOne({ id });
     const state = await getDBState(req.user.id);
     res.json({ success: true, state });
@@ -1247,6 +1263,106 @@ app.delete('/api/settlements/:id', authenticateJWT, async (req: any, res) => {
   }
 });
 
+// Outgoing Daily WhatsApp Reminders Helper
+let lastRunDate: string = '';
+
+export async function sendDailyWhatsAppReminders(todayStr: string) {
+  console.log(`[Reminder Scheduler] Checking daily reminders for date: ${todayStr}`);
+  try {
+    // 1. Fetch all users with registered WhatsApp numbers
+    const users = await UserModel.find({ whatsappNumber: { $exists: true, $ne: '' } });
+    if (users.length === 0) {
+      console.log('[Reminder Scheduler] No users found with linked WhatsApp numbers.');
+      return;
+    }
+
+    // 2. Fetch all expenses logged today
+    const todayExpenses = await ExpenseModel.find({ date: todayStr });
+    const groupsWithExpenses = new Set(todayExpenses.map(e => e.groupId));
+
+    console.log(`[Reminder Scheduler] Groups that logged expenses today:`, Array.from(groupsWithExpenses));
+
+    // 3. Check each user's group
+    for (const user of users) {
+      if (!user.groupId) continue;
+
+      if (!groupsWithExpenses.has(user.groupId)) {
+        console.log(`[Reminder Scheduler] Group for ${user.name} (${user.groupId}) has not logged any expense today. Sending WhatsApp reminder to ${user.whatsappNumber}...`);
+        
+        const messageText = `👋 *Hi ${user.name}!* \n\nThis is a friendly reminder from *FamBudget Bot*. 🤖📱\n\nWe noticed that your group hasn't logged any expenses for today yet. If you spent anything today, reply directly to this chat (e.g. "Spent 600 at Starbucks for coffee today" or attach a transaction screenshot) to log it! 💰💸`;
+
+        await sendWhatsAppMessage(user.whatsappNumber, messageText);
+
+        // Also log this outgoing bot message in the WhatsApp Chat history so it shows in the UI
+        await WhatsAppChatModel.create({
+          id: `bot-reminder-${Date.now()}-${user.id}`,
+          sender: 'bot',
+          text: messageText,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log(`[Reminder Scheduler] User ${user.name}'s group (${user.groupId}) already logged expenses today.`);
+      }
+    }
+  } catch (err) {
+    console.error('[Reminder Scheduler] Error running daily reminders:', err);
+  }
+}
+
+// Background scheduler checker running every 30 seconds
+export function startDailyReminderScheduler() {
+  console.log('[Reminder Scheduler] Daily WhatsApp reminder scheduler started. Checks daily at 19:30 (7:30 PM) IST.');
+  setInterval(async () => {
+    const now = new Date();
+    
+    // Get current time in Asia/Kolkata (IST)
+    const timeFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    
+    const [istHourStr, istMinStr] = timeFormatter.format(now).split(':');
+    const hours = parseInt(istHourStr, 10);
+    const minutes = parseInt(istMinStr, 10);
+
+    if (hours === 19 && minutes === 30) {
+      // Get date string in Asia/Kolkata (IST)
+      const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const todayStr = dateFormatter.format(now);
+      
+      if (lastRunDate !== todayStr) {
+        lastRunDate = todayStr;
+        await sendDailyWhatsAppReminders(todayStr);
+      }
+    }
+  }, 30000);
+}
+
+// Manual testing route to force-trigger daily reminders immediately
+app.post('/api/test/trigger-reminders', authenticateJWT, async (req: any, res) => {
+  try {
+    const now = new Date();
+    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const todayStr = dateFormatter.format(now);
+    await sendDailyWhatsAppReminders(todayStr);
+    res.json({ success: true, message: 'Daily WhatsApp reminders triggered successfully.' });
+  } catch (err: any) {
+    res.status(550).json({ error: 'Failed to trigger reminders', message: err.message });
+  }
+});
+
 // ------------------- VITE & STATIC HANDLING -------------------
 export async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -1265,6 +1381,9 @@ export async function startServer() {
     });
   }
 
+  // Start the background WhatsApp reminder scheduler
+  startDailyReminderScheduler();
+
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully started on port http://localhost:${PORT}`);
   });
@@ -1274,6 +1393,28 @@ export async function startServer() {
 export async function connectDatabase() {
   const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/familyfunds';
   console.log('Connecting to MongoDB at URI:', MONGODB_URI);
-  await mongoose.connect(MONGODB_URI);
-  console.log('MongoDB successfully connected.');
+  try {
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 4000 // 4 seconds timeout
+    });
+    console.log('MongoDB successfully connected.');
+  } catch (err) {
+    console.error('Failed to connect to primary MongoDB cluster:', err);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Starting local in-memory fallback database (MongoMemoryServer)...');
+      try {
+        const { MongoMemoryServer } = await import('mongodb-memory-server');
+        const mongoServer = await MongoMemoryServer.create();
+        const fallbackUri = mongoServer.getUri();
+        console.log('Connecting to in-memory fallback database at:', fallbackUri);
+        await mongoose.connect(fallbackUri);
+        console.log('[Fallback] MongoDB connected successfully to local in-memory instance.');
+      } catch (fallbackErr) {
+        console.error('In-memory fallback database startup failed:', fallbackErr);
+        throw err; // throw original connection error if fallback also fails
+      }
+    } else {
+      throw err;
+    }
+  }
 }

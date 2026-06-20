@@ -9,7 +9,6 @@ import DashboardView from './components/DashboardView';
 import ExpensesView from './components/ExpensesView';
 import SettlementView from './components/SettlementView';
 import FamilyView from './components/FamilyView';
-import WhatsAppBotView from './components/WhatsAppBotView';
 import AdvisorView from './components/AdvisorView';
 import { 
   BarChart3, 
@@ -26,7 +25,8 @@ import {
   CreditCard,
   LogOut,
   Filter,
-  BrainCircuit
+  BrainCircuit,
+  Plus
 } from 'lucide-react';
 
 export default function App() {
@@ -34,6 +34,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [triggerAddExpense, setTriggerAddExpense] = useState(false);
 
   // Authentication states
   const [userToken, setUserToken] = useState<string | null>(() => localStorage.getItem('family_funds_token'));
@@ -205,6 +206,7 @@ export default function App() {
 
   // 2. Family & Group Management APIs
   const handleAddGroup = async (name: string) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth('/api/groups', {
         method: 'POST',
@@ -217,10 +219,13 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleDeleteGroup = async (id: string) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth(`/api/groups/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -229,10 +234,13 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleAddUser = async (userPayload: { name: string; email: string; groupId: string; role: 'admin' | 'member'; whatsappNumber?: string }) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth('/api/users', {
         method: 'POST',
@@ -245,24 +253,32 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleUpdateUser = async (id: string, updatedPayload: Partial<User>) => {
-    const res = await fetchWithAuth(`/api/users/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedPayload)
-    });
-    const body = await res.json();
-    if (res.ok && body.success) {
-      setDbState(body.state);
-    } else {
-      throw new Error(body.error || 'Failed to update user profile.');
+    setIsSyncing(true);
+    try {
+      const res = await fetchWithAuth(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPayload)
+      });
+      const body = await res.json();
+      if (res.ok && body.success) {
+        setDbState(body.state);
+      } else {
+        throw new Error(body.error || 'Failed to update user profile.');
+      }
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleDeleteUser = async (id: string) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth(`/api/users/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -271,11 +287,14 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   // 3. Expense Management APIs
   const handleAddExpense = async (expensePayload: Omit<Expense, 'id' | 'groupId' | 'createdAt'>, imageBase64?: string) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth('/api/expenses', {
         method: 'POST',
@@ -291,10 +310,13 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleEditExpense = async (id: string, updatedPayload: Partial<Expense>) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth(`/api/expenses/${id}`, {
         method: 'PUT',
@@ -307,10 +329,13 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleDeleteExpense = async (id: string) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth(`/api/expenses/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -319,6 +344,8 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -339,34 +366,7 @@ export default function App() {
     return null;
   };
 
-  // 4. WhatsApp Chat APIs
-  const handleSendWhatsApp = async (text: string, base64Image?: string, senderName?: string) => {
-    try {
-      const res = await fetchWithAuth('/api/whatsapp/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, base64Image, senderName })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setDbState(updated);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleClearWhatsApp = async () => {
-    try {
-      const res = await fetchWithAuth('/api/whatsapp/clear', { method: 'POST' });
-      if (res.ok) {
-        const updated = await res.json();
-        setDbState(updated);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  // WhatsApp emulator helper APIs removed because bot is now integrated
 
   const handleSendAdvisor = async (text: string) => {
     const res = await fetchWithAuth('/api/ai/advisor', {
@@ -396,6 +396,7 @@ export default function App() {
 
   // 6. Settlement APIs
   const handleAddSettlement = async (payload: Omit<Settlement, 'id' | 'status' | 'date'>) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth('/api/settlements', {
         method: 'POST',
@@ -408,10 +409,13 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleMarkSettleCompleted = async (id: string) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth(`/api/settlements/${id}/settle`, { method: 'PUT' });
       if (res.ok) {
@@ -420,10 +424,13 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleDeleteSettlement = async (id: string) => {
+    setIsSyncing(true);
     try {
       const res = await fetchWithAuth(`/api/settlements/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -432,6 +439,8 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -442,86 +451,86 @@ export default function App() {
     { id: 'settlement', name: 'Settlement Engine', icon: WalletCards },
     { id: 'family', name: 'Family & Groups', icon: Users2 },
     { id: 'advisor', name: 'AI Advisor', icon: BrainCircuit },
-    { id: 'whatsapp', name: 'WhatsApp Bot', icon: MessageSquareCode },
   ];
 
   // Auth Guard
   if (!userToken || !currentUser) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        {/* Glow orbs */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-gradient-to-tr from-emerald-500/10 to-amber-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+
         {/* Brand header */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="size-10 bg-indigo-600 rounded-xl text-white shadow-lg flex items-center justify-center font-bold font-mono text-lg">
+        <div className="flex items-center gap-3 mb-8 relative z-10 animate-fade-in">
+          <div className="size-11 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-xl text-white shadow-lg shadow-emerald-950/20 flex items-center justify-center font-bold font-mono text-xl">
             F
           </div>
           <div>
             <h1 className="font-bold text-2xl tracking-tight text-white font-sans">FamilyFunds</h1>
-            <span className="text-[10px] text-slate-500 font-bold tracking-wider uppercase">Secure Ledger Vault</span>
+            <span className="text-[9px] text-slate-500 font-extrabold tracking-widest uppercase font-mono block mt-0.5">Secure Ledger Vault</span>
           </div>
         </div>
 
         {/* Auth Box */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl space-y-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full opacity-5 blur-3xl"></div>
-          
-          <div className="space-y-1 relative z-10">
+        <div className="bg-[#0f121d]/80 border border-white/5 rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl space-y-6 relative z-10 backdrop-blur-xl">
+          <div className="space-y-1">
             <h2 className="text-xl font-bold text-white tracking-tight">Sharma Family Vault</h2>
-            <p className="text-slate-400 text-xs font-medium">Verify credentials or select quick-login for verification.</p>
+            <p className="text-slate-400 text-xs font-semibold">Verify credentials or onboard a new member profile.</p>
           </div>
 
           {loginError && (
-            <div className="p-3 bg-rose-950/40 border border-rose-900/30 text-rose-450 text-xs font-semibold rounded-xl flex items-center gap-1.5 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 animate-ping"></span>
+            <div className="p-3 bg-rose-950/20 border border-rose-900/30 text-rose-450 text-xs font-semibold rounded-xl flex items-center gap-1.5 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
               {loginError}
             </div>
           )}
 
           {isRegisterMode ? (
             /* REGISTRATION FORM */
-            <form onSubmit={handleRegisterSubmit} className="space-y-4 relative z-10">
+            <form onSubmit={handleRegisterSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Full Name</label>
+                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Full Name</label>
                 <input 
                   type="text" 
                   required
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
                   placeholder="e.g. Aunt Meera"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 text-slate-150 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-semibold"
+                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
+                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Email Address</label>
                 <input 
                   type="email" 
                   required
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
                   placeholder="meera@family.com"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 text-slate-150 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-semibold"
+                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Password</label>
+                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Password</label>
                 <input 
                   type="password" 
                   required
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 text-slate-150 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-semibold font-mono"
+                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold font-mono transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Family Group Allocation</label>
+                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Family Group Allocation</label>
                 <select
                   required
                   value={regGroupId}
                   onChange={(e) => setRegGroupId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 text-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-semibold"
+                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-300 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
                 >
                   {publicGroups.map(g => (
                     <option key={g.id} value={g.id}>{g.name}</option>
@@ -530,61 +539,60 @@ export default function App() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">WhatsApp Number (Optional)</label>
+                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">WhatsApp Number (Optional)</label>
                 <input 
                   type="text" 
                   value={regWhatsapp}
                   onChange={(e) => setRegWhatsapp(e.target.value)}
                   placeholder="e.g. 919876543210 (with country code)"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 text-slate-150 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-semibold"
+                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
                 />
               </div>
 
               <button 
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-755 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-650/20 cursor-pointer transition disabled:opacity-50"
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/20 cursor-pointer transition disabled:opacity-50"
               >
                 {authLoading ? 'Creating profile...' : 'Register Profile'}
               </button>
             </form>
           ) : (
             /* LOGIN FORM */
-            <form onSubmit={handleLoginSubmit} className="space-y-4 relative z-10">
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Email Address</label>
+                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Email Address</label>
                 <input 
                   type="email" 
                   required
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   placeholder="e.g. rahul@family.com"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 text-slate-150 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-semibold"
+                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Password</label>
+                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Password</label>
                 <input 
                   type="password" 
                   required
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 text-slate-150 rounded-xl text-sm focus:outline-none focus:border-indigo-500 font-semibold font-mono"
+                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold font-mono transition-all"
                 />
               </div>
 
               <button 
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-650/20 cursor-pointer transition disabled:opacity-50"
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/20 cursor-pointer transition disabled:opacity-50"
               >
                 {authLoading ? 'Verifying credentials...' : 'Access Vault'}
               </button>
             </form>
           )}
-
 
           {/* Mode Switcher */}
           <div className="text-center text-xs relative z-10 pt-2">
@@ -594,7 +602,7 @@ export default function App() {
                 setIsRegisterMode(!isRegisterMode);
                 setLoginError('');
               }}
-              className="text-indigo-400 hover:underline font-bold cursor-pointer bg-transparent border-0 outline-none"
+              className="text-emerald-450 hover:text-emerald-350 hover:underline font-bold cursor-pointer bg-transparent border-0 outline-none"
             >
               {isRegisterMode ? 'Already registered? Log in here' : 'New family member? Onboard profile'}
             </button>
@@ -607,12 +615,12 @@ export default function App() {
   // Loading State
   if (!dbState) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center p-6">
         <div className="text-center space-y-4">
-          <div className="size-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="size-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <div>
-            <h3 className="text-slate-100 font-bold font-sans text-base">FamilyFunds Loading</h3>
-            <p className="text-slate-500 text-xs mt-1">Retrieving Sharma Family records from MongoDB...</p>
+            <h3 className="text-white font-bold font-sans text-base">FamilyFunds Loading</h3>
+            <p className="text-slate-500 text-xs mt-1 font-semibold">Retrieving Sharma Family records from MongoDB...</p>
           </div>
         </div>
       </div>
@@ -620,26 +628,26 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col lg:flex-row">
       
       {/* 1. SIDEBAR Navigation rail (Desktop) */}
-      <aside className="w-full lg:w-72 bg-slate-900 text-slate-100 flex-col justify-between shrink-0 border-r border-slate-800 hidden lg:flex">
+      <aside className="w-full lg:w-72 bg-[#0d101d] text-slate-100 flex-col justify-between shrink-0 border-r border-white/5 hidden lg:flex">
         <div className="p-6 space-y-8">
           
           {/* Brand header */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-650 rounded-lg text-white shadow-lg flex items-center justify-center font-bold font-mono">
+            <div className="w-9 h-9 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white shadow-lg flex items-center justify-center font-bold font-mono">
               F
             </div>
             <div>
-              <h2 className="font-semibold text-lg tracking-tight text-white font-sans">FamilyFunds</h2>
-              <span className="text-[10px] text-slate-500 font-bold tracking-wider uppercase">Sharma family ledger</span>
+              <h2 className="font-bold text-lg tracking-tight text-white font-sans">FamilyFunds</h2>
+              <span className="text-[9px] text-slate-500 font-extrabold tracking-widest uppercase font-mono mt-0.5">Sharma family ledger</span>
             </div>
           </div>
 
           {/* Navigation links */}
-          <nav className="space-y-1 pt-4">
-            <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Main Menu</div>
+          <nav className="space-y-1.5 pt-4">
+            <div className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono mb-2">Main Menu</div>
             {navItems.map(item => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -649,10 +657,10 @@ export default function App() {
                   type="button"
                   id={`side-nav-${item.id}`}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium tracking-wide transition-all cursor-pointer ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium tracking-wide transition-all cursor-pointer ${
                     isActive 
-                      ? 'bg-slate-800 text-indigo-400 border-l-4 border-indigo-500 font-semibold' 
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      ? 'bg-emerald-950/30 text-emerald-450 border-l-2 border-emerald-500 font-bold shadow-inner' 
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
                   <Icon className="size-4.5 shrink-0" />
@@ -664,21 +672,21 @@ export default function App() {
         </div>
 
         {/* Sync panel on footer */}
-        <div className="p-6 border-t border-slate-800 space-y-3.5 bg-slate-950">
-          <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono font-medium">
-            <span className="flex items-center gap-1">
-              <CircleDot className={`size-2 ${isSyncing ? 'text-amber-500 animate-ping' : 'text-green-500'}`} />
+        <div className="p-6 border-t border-white/5 space-y-3.5 bg-[#090b11]/80">
+          <div className="flex items-center justify-between text-[10px] text-slate-550 font-mono font-bold">
+            <span className="flex items-center gap-1.5">
+              <CircleDot className={`size-2.5 ${isSyncing ? 'text-amber-500 animate-ping' : 'text-emerald-505'}`} />
               {isSyncing ? 'Syncing...' : 'MongoDB Connected'}
             </span>
-            <span>V3.0</span>
+            <span className="text-slate-600">V3.5</span>
           </div>
 
           {/* Active member session info & logout */}
-          <div className="text-xs text-slate-400 font-semibold border-t border-slate-850 pt-2.5 flex items-center justify-between gap-1">
-            <span className="truncate">Logged as: <b className="text-indigo-400 font-bold">{currentUser?.name}</b></span>
+          <div className="text-xs text-slate-400 font-semibold border-t border-white/5 pt-2.5 flex items-center justify-between gap-1">
+            <span className="truncate">Logged as: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
             <button 
               onClick={handleLogout}
-              className="text-rose-450 hover:text-rose-400 cursor-pointer flex items-center gap-0.5 bg-transparent border-0 outline-none p-1 rounded transition-colors"
+              className="text-rose-400 hover:text-rose-350 cursor-pointer flex items-center gap-0.5 bg-transparent border-0 outline-none p-1 rounded transition-colors"
               title="Logout Profile"
             >
               <LogOut className="size-4" />
@@ -689,27 +697,38 @@ export default function App() {
             type="button"
             id="btn-factory-reset"
             onClick={handleResetSystem}
-            className="w-full py-2 bg-slate-900 hover:bg-red-955/30 hover:text-red-400 text-slate-450 rounded-xl transition border border-slate-800 text-[10px] font-bold cursor-pointer"
+            className="w-full py-2 bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 text-[10px] font-bold cursor-pointer"
           >
             <RotateCcw className="size-3 inline mr-1" />
-            Reset Family Factory Default
+            Reset Family Default
           </button>
         </div>
       </aside>
 
       {/* 2. MOBILE Header with burger toggle drawer */}
-      <header className="lg:hidden bg-slate-950 text-white p-4 flex items-center justify-between border-b border-slate-800 shrink-0">
+      <header className="lg:hidden bg-[#090b11] text-white p-4 flex items-center justify-between border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="size-8 bg-indigo-650 rounded-lg text-white flex items-center justify-center font-bold text-xs">
+          <div className="size-8 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white flex items-center justify-center font-bold text-xs">
             F
           </div>
-          <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-100">FamilyFunds</h2>
+          <h2 className="font-bold text-sm tracking-wide text-slate-100">FamilyFunds</h2>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setActiveTab('expenses');
+              setTriggerAddExpense(true);
+            }}
+            className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-650 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+          >
+            <Plus className="size-3.5" />
+            <span>Add</span>
+          </button>
+          
           <button 
             onClick={handleLogout}
-            className="text-slate-450 hover:text-rose-400 p-1 flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none text-xs font-semibold transition-colors"
+            className="text-slate-450 hover:text-rose-455 p-1 flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none text-xs font-semibold transition-colors"
             title="Log Out"
           >
             <LogOut className="size-4" />
@@ -718,7 +737,7 @@ export default function App() {
             type="button"
             id="btn-mobile-menu"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1.5 hover:bg-slate-850 rounded-md cursor-pointer"
+            className="p-1.5 hover:bg-slate-855 rounded-md cursor-pointer"
           >
             {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -727,7 +746,7 @@ export default function App() {
 
       {/* Mobile drawer drawer container */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-slate-900 border-b border-slate-800 z-45 flex flex-col p-4 space-y-4 animate-fade-in relative shadow-lg">
+        <div className="lg:hidden bg-[#0d101d] border-b border-white/5 z-45 flex flex-col p-4 space-y-4 animate-fade-in relative shadow-lg">
           <div className="grid grid-cols-2 gap-2">
             {navItems.map(item => {
               const Icon = item.icon;
@@ -742,8 +761,8 @@ export default function App() {
                   }}
                   className={`flex items-center gap-2.5 p-3 rounded-lg text-xs font-semibold ${
                     activeTab === item.id 
-                      ? 'bg-indigo-600 text-white font-semibold' 
-                      : 'bg-slate-850 text-slate-350 hover:text-white'
+                      ? 'bg-emerald-600 text-white font-bold' 
+                      : 'bg-white/5 text-slate-350 hover:text-white'
                   }`}
                 >
                   <Icon className="size-3.5" />
@@ -753,7 +772,7 @@ export default function App() {
             })}
           </div>
 
-          <div className="pt-2 border-t border-slate-800 flex justify-between gap-1.5 items-center">
+          <div className="pt-2 border-t border-white/5 flex justify-between gap-1.5 items-center">
             <button
               type="button"
               id="btn-mobile-reset"
@@ -761,9 +780,9 @@ export default function App() {
                 handleResetSystem();
                 setMobileMenuOpen(false);
               }}
-              className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+              className="text-[10px] text-rose-400 hover:underline cursor-pointer font-bold"
             >
-              Factory defaults reset
+              Reset Database default
             </button>
             <span className="text-[10px] text-slate-400 font-semibold truncate">User: {currentUser?.name}</span>
           </div>
@@ -771,64 +790,84 @@ export default function App() {
       )}
 
       {/* 3. MAIN Panel display canvas */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full custom-scrollbar">
-        
-        {/* Render toggle mapping */}
-        {activeTab === 'dashboard' && (
-          <DashboardView 
-            state={dbState} 
-            onNavigate={(id) => setActiveTab(id)} 
-          />
-        )}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Sleek Top Header Bar (Desktop & Tablet) */}
+        <header className="hidden lg:flex items-center justify-between px-8 py-5 border-b border-white/5 bg-[#090b11]/80 backdrop-blur-md shrink-0">
+          <div>
+            <h1 className="text-xl font-bold text-white capitalize tracking-tight font-sans">
+              {activeTab === 'expenses' ? 'Family Ledger' : activeTab === 'settlement' ? 'Settlement Engine' : activeTab === 'family' ? 'Family & Groups' : activeTab}
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">Manage and review your family ledger operations</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                setActiveTab('expenses');
+                setTriggerAddExpense(true);
+              }}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-650 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950/20 flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="size-4" />
+              <span>Log Expense</span>
+            </button>
+          </div>
+        </header>
 
-        {activeTab === 'expenses' && (
-          <ExpensesView 
-            state={dbState}
-            onAddExpense={handleAddExpense}
-            onEditExpense={handleEditExpense}
-            onDeleteExpense={handleDeleteExpense}
-            onTriggerOcr={handleTriggerOcr}
-          />
-        )}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full custom-scrollbar">
+          
+          {/* Render toggle mapping */}
+          {activeTab === 'dashboard' && (
+            <DashboardView 
+              state={dbState} 
+              onNavigate={(id) => setActiveTab(id)} 
+            />
+          )}
 
-        {activeTab === 'settlement' && (
-          <SettlementView 
-            state={dbState}
-            onAddSettlement={handleAddSettlement}
-            onMarkSettleCompleted={handleMarkSettleCompleted}
-            onDeleteSettlement={handleDeleteSettlement}
-          />
-        )}
+          {activeTab === 'expenses' && (
+            <ExpensesView 
+              state={dbState}
+              onAddExpense={handleAddExpense}
+              onEditExpense={handleEditExpense}
+              onDeleteExpense={handleDeleteExpense}
+              onTriggerOcr={handleTriggerOcr}
+              isSyncing={isSyncing}
+              triggerAddExpense={triggerAddExpense}
+              onTriggerAddExpenseProcessed={() => setTriggerAddExpense(false)}
+            />
+          )}
 
-        {activeTab === 'family' && (
-          <FamilyView 
-            state={dbState}
-            onAddGroup={handleAddGroup}
-            onDeleteGroup={handleDeleteGroup}
-            onAddUser={handleAddUser}
-            onDeleteUser={handleDeleteUser}
-            onUpdateUser={handleUpdateUser}
-          />
-        )}
+          {activeTab === 'settlement' && (
+            <SettlementView 
+              state={dbState}
+              onAddSettlement={handleAddSettlement}
+              onMarkSettleCompleted={handleMarkSettleCompleted}
+              onDeleteSettlement={handleDeleteSettlement}
+              isSyncing={isSyncing}
+            />
+          )}
 
-        {activeTab === 'whatsapp' && (
-          <WhatsAppBotView 
-            state={dbState}
-            onSendWhatsApp={handleSendWhatsApp}
-            onClearWhatsApp={handleClearWhatsApp}
-          />
-        )}
+          {activeTab === 'family' && (
+            <FamilyView 
+              state={dbState}
+              onAddGroup={handleAddGroup}
+              onDeleteGroup={handleDeleteGroup}
+              onAddUser={handleAddUser}
+              onDeleteUser={handleDeleteUser}
+              onUpdateUser={handleUpdateUser}
+              isSyncing={isSyncing}
+            />
+          )}
 
-        {activeTab === 'advisor' && (
-          <AdvisorView 
-            state={dbState}
-            onSendAdvisor={handleSendAdvisor}
-            onClearAdvisor={handleClearAdvisor}
-          />
-        )}
+          {activeTab === 'advisor' && (
+            <AdvisorView 
+              state={dbState}
+              onSendAdvisor={handleSendAdvisor}
+              onClearAdvisor={handleClearAdvisor}
+            />
+          )}
 
-      </main>
-
+        </main>
+      </div>
     </div>
   );
 }
