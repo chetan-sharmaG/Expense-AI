@@ -183,7 +183,7 @@ export default function App() {
   };
 
 
-  // Reset database state to premium Mehta Family defaults
+  // Reset database state to premium Sharma Family defaults
   const handleResetSystem = async () => {
     if (!confirm('Are you sure you wish to wipe current inputs and restore default family database defaults? This is irreversible.')) {
       return;
@@ -465,7 +465,7 @@ export default function App() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full opacity-5 blur-3xl"></div>
           
           <div className="space-y-1 relative z-10">
-            <h2 className="text-xl font-bold text-white tracking-tight">Mehta Family Vault</h2>
+            <h2 className="text-xl font-bold text-white tracking-tight">Sharma Family Vault</h2>
             <p className="text-slate-400 text-xs font-medium">Verify credentials or select quick-login for verification.</p>
           </div>
 
@@ -612,7 +612,7 @@ export default function App() {
           <div className="size-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <div>
             <h3 className="text-slate-100 font-bold font-sans text-base">FamilyFunds Loading</h3>
-            <p className="text-slate-500 text-xs mt-1">Retrieving Mehta Family records from MongoDB...</p>
+            <p className="text-slate-500 text-xs mt-1">Retrieving Sharma Family records from MongoDB...</p>
           </div>
         </div>
       </div>
@@ -633,7 +633,7 @@ export default function App() {
             </div>
             <div>
               <h2 className="font-semibold text-lg tracking-tight text-white font-sans">FamilyFunds</h2>
-              <span className="text-[10px] text-slate-500 font-bold tracking-wider uppercase">Mehta family ledger</span>
+              <span className="text-[10px] text-slate-500 font-bold tracking-wider uppercase">Sharma family ledger</span>
             </div>
           </div>
 

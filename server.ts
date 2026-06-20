@@ -88,7 +88,7 @@ export async function seedDatabase() {
     const familyId = 'fam-1';
     await FamilyModel.create({
       id: familyId,
-      name: 'Mehta Family Assembly',
+      name: 'Sharma Family Assembly',
       createdAt: new Date().toISOString()
     });
 
@@ -103,15 +103,15 @@ export async function seedDatabase() {
       {
         id: 'chat-1',
         sender: 'bot' as const,
-        text: 'Hello Mehta Family! I am FamBudget, your automated Expense Agent. 🤖📱\n\nSend me text like "Paid ₹850 for vegetables" or drop any mobile transaction screenshot (GPay, PhonePe, Paytm, etc.) right here to instantly log expenses!',
+        text: 'Hello Sharma Family! I am FamBudget, your automated Expense Agent. 🤖📱\n\nSend me text like "Paid ₹850 for vegetables" or drop any mobile transaction screenshot (GPay, PhonePe, Paytm, etc.) right here to instantly log expenses!',
         timestamp: new Date().toISOString()
       }
     ];
     await WhatsAppChatModel.insertMany(whatsappChat);
 
-    console.log('Seeding Mehta Family structures complete!');
+    console.log('Seeding Sharma Family structures complete!');
   } catch (err) {
-    console.error('Failed to seed default Mehta Family database:', err);
+    console.error('Failed to seed default Sharma Family database:', err);
   }
 }
 
@@ -1036,7 +1036,7 @@ app.post('/api/whatsapp/clear', authenticateJWT, async (req: any, res) => {
     await WhatsAppChatModel.create({
       id: 'chat-1',
       sender: 'bot',
-      text: 'Hello Mehta Family! I am FamBudget, your automated Expense Agent. 🤖📱\n\nSend me text like "Paid ₹850 for vegetables" or drop any mobile transaction screenshot (GPay, PhonePe, Paytm, etc.) right here to instantly log expenses!',
+      text: 'Hello Sharma Family! I am FamBudget, your automated Expense Agent. 🤖📱\n\nSend me text like "Paid ₹850 for vegetables" or drop any mobile transaction screenshot (GPay, PhonePe, Paytm, etc.) right here to instantly log expenses!',
       timestamp: new Date().toISOString()
     });
 
@@ -1103,11 +1103,11 @@ app.post('/api/ai/advisor', authenticateJWT, async (req: any, res) => {
 
     // 3. System instruction text
     const systemInstruction = `
-You are "Mehta Finance Advisor", a premium, wise, and helpful AI financial consultant for the Mehta family assembly.
+You are "Sharma Finance Advisor", a premium, wise, and helpful AI financial consultant for the Sharma family assembly.
 Your goal is to analyze the family's expense ledger, groups, users, and settlements, and provide personalized, highly contextual financial insights, saving strategies, group-wise spending breakdowns, and answer any queries.
 
 DATABASE CONTEXT:
-- Family Name: ${dbState.family?.name || 'Mehta Family Assembly'}
+- Family Name: ${dbState.family?.name || 'Sharma Family Assembly'}
 - Groups (Couples/Parents):
 ${groupsString}
 - Members:

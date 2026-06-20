@@ -1,7 +1,7 @@
 {
   "family": {
     "id": "fam-1",
-    "name": "Mehta Family Assembly",
+    "name": "Sharma Family Assembly",
     "createdAt": "2026-06-14T13:41:00.264Z"
   },
   "groups": [
@@ -32,35 +32,35 @@
     {
       "id": "usr-2",
       "name": "Priya",
-      "email": "priya.mehta@family.com",
+      "email": "priya.sharma@family.com",
       "groupId": "grp-1",
       "role": "member"
     },
     {
       "id": "usr-3",
       "name": "Amit",
-      "email": "amit.mehta@family.com",
+      "email": "amit.sharma@family.com",
       "groupId": "grp-2",
       "role": "member"
     },
     {
       "id": "usr-4",
       "name": "Sneha",
-      "email": "sneha.mehta@family.com",
+      "email": "sneha.sharma@family.com",
       "groupId": "grp-2",
       "role": "member"
     },
     {
       "id": "usr-5",
       "name": "Papa",
-      "email": "papa.mehta@family.com",
+      "email": "papa.sharma@family.com",
       "groupId": "grp-3",
       "role": "member"
     },
     {
       "id": "usr-6",
       "name": "Mummy",
-      "email": "mummy.mehta@family.com",
+      "email": "mummy.sharma@family.com",
       "groupId": "grp-3",
       "role": "member"
     }
@@ -160,7 +160,7 @@
     {
       "id": "chat-1",
       "sender": "bot",
-      "text": "Hello Mehta Family! I am FamBudget, your automated Expense Agent. 🤖📱\n\nSend me text like \"Paid ₹850 for vegetables\" or drop any mobile transaction screenshot (GPay, PhonePe, Paytm, etc.) right here to instantly log expenses!",
+      "text": "Hello Sharma Family! I am FamBudget, your automated Expense Agent. 🤖📱\n\nSend me text like \"Paid ₹850 for vegetables\" or drop any mobile transaction screenshot (GPay, PhonePe, Paytm, etc.) right here to instantly log expenses!",
       "timestamp": "2026-06-14T13:41:00.264Z"
     }
   ]

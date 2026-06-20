@@ -190,7 +190,7 @@ export default function FamilyView({
                   id="input-user-email"
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
-                  placeholder="e.g. rohan.mehta@family.com"
+                  placeholder="e.g. rohan.sharma@family.com"
                   className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 text-slate-100 rounded-lg focus:outline-none focus:border-indigo-500 font-medium"
                 />
               </div>

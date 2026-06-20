@@ -108,7 +108,7 @@ export default function WhatsAppBotView({
             💬
           </div>
           <div>
-            <h3 className="font-bold text-sm tracking-wide">Mehta family Assembly</h3>
+            <h3 className="font-bold text-sm tracking-wide">Sharma family Assembly</h3>
             <p className="text-[10px] text-teal-100 font-medium">
               FamBudget Bot, {users.map(u => u.name).join(', ')} (Online)
             </p>

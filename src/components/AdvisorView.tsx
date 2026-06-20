@@ -77,7 +77,7 @@ export default function AdvisorView({
   };
 
   const handleClearChat = async () => {
-    if (confirm('Are you sure you want to clear your conversation history with Mehta Finance Advisor?')) {
+    if (confirm('Are you sure you want to clear your conversation history with Sharma Finance Advisor?')) {
       await onClearAdvisor();
     }
   };
@@ -202,7 +202,7 @@ export default function AdvisorView({
           </div>
           <div>
             <h3 className="font-bold text-sm tracking-wide text-white flex items-center gap-1.5">
-              Mehta Finance Advisor
+              Sharma Finance Advisor
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
@@ -242,7 +242,7 @@ export default function AdvisorView({
               <Sparkles className="size-8" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white tracking-tight">Mehta Family Wealth Advisory</h2>
+              <h2 className="text-lg font-bold text-white tracking-tight">Sharma Family Wealth Advisory</h2>
               <p className="text-slate-400 text-xs mt-2 leading-relaxed">
                 Welcome! I am your private AI financial advisor. I analyze your family ledger and settlements in real time to recommend budget balances, optimize expenses, and give couple contribution insights.
               </p>
@@ -275,7 +275,7 @@ export default function AdvisorView({
                 {/* Sender Title */}
                 <div className="text-[10px] font-extrabold uppercase tracking-widest mb-1.5 flex items-center justify-between gap-4 select-none">
                   <span className={isUser ? 'text-indigo-200' : 'text-indigo-400 font-bold'}>
-                    {isUser ? '👤 You' : '🧠 Mehta Finance Advisor'}
+                    {isUser ? '👤 You' : '🧠 Sharma Finance Advisor'}
                   </span>
                   <span className="text-[9px] text-slate-400 font-semibold font-mono">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
