@@ -10,6 +10,7 @@ export default (req: any, res: any) => {
     env: {
       hasMongoUri: !!process.env.MONGODB_URI,
       hasGeminiKey: !!process.env.GEMINI_API_KEY,
+      hasGroqKey: !!process.env.GROQ_API_KEY,
       hasJwtSecret: !!process.env.JWT_SECRET,
       nodeVersion: process.version,
     },

@@ -322,7 +322,7 @@ export default function AdvisorView({
               <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-850 text-slate-400 font-mono text-[10px] space-y-1">
                 <div className="text-indigo-400 font-bold uppercase">Setup Guide:</div>
                 <div>1. Open your <code className="text-white">.env.local</code> file in the project root.</div>
-                <div>2. Set <code className="text-white">GEMINI_API_KEY="your_actual_key_here"</code>.</div>
+                <div>2. Set <code className="text-white">GROQ_API_KEY="your_actual_key_here"</code>.</div>
                 <div>3. Save the file and restart the server.</div>
               </div>
             </div>

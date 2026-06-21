@@ -135,6 +135,36 @@ function getAiClient(): GoogleGenAI {
   return aiClient;
 }
 
+// Reusable Groq API client helper using native fetch (0 package dependencies)
+async function callGroqChat(messages: { role: string; content: string }[], jsonMode: boolean = false): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error('GROQ_API_KEY is not configured in environment variables.');
+  }
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages,
+      temperature: 0.1,
+      ...(jsonMode ? { response_format: { type: 'json_object' } } : {})
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq API error (status ${response.status}): ${errorText}`);
+  }
+
+  const data: any = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
 // ------------------- API ROUTES -------------------
 
 // Auth APIs: Register New Profile
@@ -303,7 +333,7 @@ app.post('/api/groups', authenticateJWT, async (req: any, res) => {
 
 app.delete('/api/groups/:id', authenticateJWT, async (req: any, res) => {
   const { id } = req.params;
-  
+
   try {
     // Reassign users of this group to first group
     const defaultGroup = await GroupModel.findOne({ id: { $ne: id } });
@@ -510,7 +540,7 @@ app.post('/api/ocr', authenticateJWT, async (req, res) => {
   try {
     const ai = getAiClient();
     const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
-    
+
     const prompt = `
       You are an expert financial receipt reader. Please parse this payment screenshot (e.g., GPay, PhonePe, Paytm, BHIM, or static physical bill/receipt) and extract critical data.
       Analyze text, merchant details, payment confirmation, bank accounts numbers or reference IDs, and transaction amount very carefully.
@@ -582,7 +612,7 @@ function parseLazyMessage(text: string) {
     .replace(/[₹$,]/g, '')
     .replace(/\b(?:rs|inr|rupees)\b/gi, '')
     .trim();
-  
+
   // 1. Number first (amount merchant)
   const numFirst = cleaned.match(/^(\d+(?:\.\d{1,2})?)\s+(.+)$/i);
   if (numFirst) {
@@ -591,7 +621,7 @@ function parseLazyMessage(text: string) {
       merchant: numFirst[2].trim()
     };
   }
-  
+
   // 2. Text first (merchant amount)
   const textFirst = cleaned.match(/^(.+?)\s+(\d+(?:\.\d{1,2})?)$/i);
   if (textFirst) {
@@ -600,7 +630,7 @@ function parseLazyMessage(text: string) {
       merchant: textFirst[1].trim()
     };
   }
-  
+
   return null;
 }
 
@@ -608,7 +638,7 @@ function parseLazyMessage(text: string) {
 async function getFinancialStats() {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  
+
   // Calculate start of current week (assuming Monday start)
   const today = new Date();
   const day = today.getDay();
@@ -672,6 +702,160 @@ async function getFinancialStats() {
   };
 }
 
+// Programmatic command router for WhatsApp bot (bypasses Gemini AI for known queries)
+async function handleProgrammaticCommand(text: string): Promise<string | null> {
+  const query = text.trim().toLowerCase();
+
+  // 1. Greetings & Help
+  if (/^(hi|hello|hey|help|menu|commands|info|welcome|assistant)$/i.test(query)) {
+    return `👋 *Hello! I am FamBudget, your automated Expense Agent.* 🤖📱\n\n` +
+           `Here are the commands you can use:\n` +
+           `• *summary* — Weekly and monthly spending summaries.\n` +
+           `• *compare* — Couple/group spend contributions.\n` +
+           `• *spenders* — Individual spend rankings.\n` +
+           `• *settlement* — Current balance sheets (who owes whom).\n` +
+           `• *categories* — Category-wise totals for this month.\n` +
+           `• *search <keyword>* — Find matching expenses (e.g., "search Starbucks").\n\n` +
+           `*To log a new expense:*\n` +
+           `Simply send the text (e.g., "DMart 1500" or "Paid ₹850 for veggies") or upload a receipt screenshot! 🚀`;
+  }
+
+  // 2. Weekly/Monthly Summary
+  if (/^(summary|spend this month|spent this month|spend this week|spent this week|month summary|week summary)$/i.test(query)) {
+    const stats = await getFinancialStats();
+    let recentStr = stats.recentExpenses.map((e, idx) => 
+      `${idx + 1}. ${e.date}: *₹${e.amount}* at *${e.merchant}* (${e.paidBy})${e.notes ? ` - "${e.notes}"` : ''}`
+    ).join('\n') || 'No recent transactions.';
+
+    return `📊 *Expense Summary Report*\n\n` +
+           `• *Current Month:* ${stats.currentMonth}\n` +
+           `• *Monthly Spend:* ₹${stats.totalMonthSpend.toLocaleString('en-IN')}\n` +
+           `• *Weekly Spend:* ₹${stats.totalWeekSpend.toLocaleString('en-IN')}\n\n` +
+           `*Recent Transactions:*\n${recentStr}`;
+  }
+
+  // 3. Group Comparison
+  if (/^(compare|group comparison|compare groups|couples comparison|group totals)$/i.test(query)) {
+    const stats = await getFinancialStats();
+    let breakStr = Object.entries(stats.groupBreakdown)
+      .map(([group, amt]) => `• *${group}:* ₹${amt.toLocaleString('en-IN')}`)
+      .join('\n') || 'No group spending logged this month.';
+
+    return `👥 *Group Contribution & Spend Comparison*\n\n` +
+           `Total spending mapped across couples and parents groups for this month:\n${breakStr}`;
+  }
+
+  // 4. Spenders / Individual Spend ranking
+  if (/^(spenders|top spender|who spent the most|spender ranking)$/i.test(query)) {
+    const stats = await getFinancialStats();
+    let breakStr = Object.entries(stats.userBreakdown)
+      .sort((a, b) => b[1] - a[1])
+      .map(([user, amt], idx) => `${idx + 1}. *${user}:* ₹${amt.toLocaleString('en-IN')}`)
+      .join('\n') || 'No spender data logged this month.';
+
+    return `👤 *Individual Spenders Leaderboard*\n\n` +
+           `Individual spending contributions for this month:\n${breakStr}`;
+  }
+
+  // 5. Category Breakdown
+  if (/^(categories|category totals|category breakdown)$/i.test(query)) {
+    const stats = await getFinancialStats();
+    let breakStr = Object.entries(stats.categoryBreakdown)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, amt]) => `• *${cat}:* ₹${amt.toLocaleString('en-IN')}`)
+      .join('\n') || 'No category spending logged this month.';
+
+    return `🏷️ *Category-wise Expenditure (Current Month)*\n\n${breakStr}`;
+  }
+
+  // 6. Settlement Calculations
+  if (/^(settlement|settlements|debts|balances|who owes what)$/i.test(query)) {
+    const [expenses, groups, users] = await Promise.all([
+      ExpenseModel.find(),
+      GroupModel.find(),
+      UserModel.find()
+    ]);
+
+    const totalFamilySpend = expenses.reduce((sum, e) => sum + e.amount, 0);
+    if (groups.length === 0) {
+      return `💸 *Current Balances & Settlements*\n\nNo family groups configured yet.`;
+    }
+
+    const fairShare = totalFamilySpend / groups.length;
+    const summaries = groups.map(g => {
+      const groupSpent = expenses
+        .filter(exp => exp.groupId === g.id)
+        .reduce((sum, exp) => sum + exp.amount, 0);
+      return {
+        groupId: g.id,
+        groupName: g.name.split(' (')[0],
+        totalSpent: groupSpent,
+        fairShare,
+        netBalance: groupSpent - fairShare
+      };
+    });
+
+    const debtors = summaries.filter(s => s.netBalance < -0.01).map(s => ({ ...s, netBalance: Math.abs(s.netBalance) })).sort((a,b) => b.netBalance - a.netBalance);
+    const creditors = summaries.filter(s => s.netBalance > 0.01).map(s => ({ ...s })).sort((a,b) => b.netBalance - a.netBalance);
+    const proposals = [];
+    
+    let dIdx = 0, cIdx = 0;
+    while (dIdx < debtors.length && cIdx < creditors.length) {
+      const debtor = debtors[dIdx];
+      const creditor = creditors[cIdx];
+      const minAmount = Math.min(debtor.netBalance, creditor.netBalance);
+      if (minAmount > 0.1) {
+        proposals.push({
+          from: debtor.groupName,
+          to: creditor.groupName,
+          amount: Math.round(minAmount * 100) / 100
+        });
+      }
+      debtor.netBalance -= minAmount;
+      creditor.netBalance -= minAmount;
+      if (debtor.netBalance < 0.1) dIdx++;
+      if (creditor.netBalance < 0.1) cIdx++;
+    }
+
+    let propStr = proposals.map(p => `• *${p.from}* owes *${p.to}*: ₹${p.amount.toLocaleString('en-IN')}`).join('\n');
+    if (!propStr) propStr = '🎉 All groups are perfectly settled! No outstanding balances.';
+
+    return `💸 *Current Balances & Settlements*\n\n` +
+           `• *Total Family Spend:* ₹${totalFamilySpend.toLocaleString('en-IN')}\n` +
+           `• *Fair Share per Group:* ₹${Math.round(fairShare * 100) / 100}\n\n` +
+           `*Outstanding Balances:*\n${propStr}`;
+  }
+
+  // 7. Expense Search (e.g., "search Starbucks")
+  if (query.startsWith('search ')) {
+    const searchTerm = text.trim().slice(7).trim();
+    if (!searchTerm) {
+      return `🔍 *Expense Search*\n\nPlease specify a keyword to search, e.g., "search Starbucks" or "search Groceries".`;
+    }
+
+    const matches = await ExpenseModel.find({
+      $or: [
+        { merchant: { $regex: searchTerm, $options: 'i' } },
+        { category: { $regex: searchTerm, $options: 'i' } },
+        { notes: { $regex: searchTerm, $options: 'i' } }
+      ]
+    }).sort({ date: -1 }).limit(10);
+
+    const users = await UserModel.find();
+    const userMap = users.reduce((acc, u) => ({ ...acc, [u.id]: u.name }), {} as Record<string, string>);
+
+    let matchStr = matches.map((e, idx) => 
+      `${idx + 1}. ${e.date}: *₹${e.amount}* at *${e.merchant}* (${userMap[e.paidBy] || e.paidBy})${e.notes ? ` - "${e.notes}"` : ''}`
+    ).join('\n');
+
+    if (!matchStr) matchStr = `No matching expenses found for "${searchTerm}".`;
+
+    return `🔍 *Search Results for "${searchTerm}"*\n\n${matchStr}`;
+  }
+
+  return null;
+}
+
 // WhatsApp Bot Chat Integration via AI Simulator
 // WhatsApp AI Parsing helper
 // Receipt OCR using server-side Gemini
@@ -679,7 +863,7 @@ async function runOcrOnReceipt(base64Image: string): Promise<{ amount: number; m
   try {
     const ai = getAiClient();
     const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
-    
+
     const prompt = `
       You are an expert financial receipt reader. Please parse this payment screenshot (e.g., GPay, PhonePe, Paytm, BHIM, or static physical bill/receipt) and extract critical data.
       Analyze text, merchant details, payment confirmation, bank accounts numbers or reference IDs, and transaction amount very carefully.
@@ -760,7 +944,7 @@ async function parseExpenseWithAi(
   }
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const ai = getAiClient();
-  
+
   const [groupsList, usersList, stats] = await Promise.all([
     GroupModel.find(),
     UserModel.find(),
@@ -851,45 +1035,25 @@ ${stats.recentExpenses.map(e => `- Date: ${e.date}, Amount: ₹${e.amount}, Merc
     5. Outputs structure in raw JSON matching the required schema.
   `;
 
-  const aiResponse = await ai.models.generateContent({
-    model: 'gemini-3.5-flash',
-    contents: [{ text: aiPrompt }],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        required: ['action', 'reply', 'expenseProposed', 'confidence'],
-        properties: {
-          action: {
-            type: Type.STRING,
-            description: 'Action type: log_expense if logging a spend, ask_question if answering stats/balance/spending questions, need_clarification if crucial info is missing.'
-          },
-          reply: {
-            type: Type.STRING,
-            description: 'Friendly response to send back to the user on WhatsApp. If action is ask_question, this must contain the detailed financial stats answer formatted with standard WhatsApp markdown (e.g. *bold*, list points).'
-          },
-          expenseProposed: {
-            type: Type.OBJECT,
-            description: 'Proposed expense details if action is log_expense or need_clarification.',
-            properties: {
-              amount: { type: Type.NUMBER },
-              category: { type: Type.STRING, description: 'Standard category match: Food, Groceries, Vegetables, Fuel, Medical, Entertainment, Travel, Shopping, Bills, Education, Rent, Investments, Miscellaneous.' },
-              date: { type: Type.STRING, description: 'Date in YYYY-MM-DD format.' },
-              merchant: { type: Type.STRING },
-              notes: { type: Type.STRING },
-              paidByName: { type: Type.STRING, description: 'Name of the person who paid if explicitly mentioned in user text (e.g. "Sneha paid"). Otherwise leave empty.' }
-            }
-          },
-          confidence: {
-            type: Type.NUMBER,
-            description: 'Confidence score from 0 to 100.'
-          }
-        }
-      }
+  const messages = [
+    {
+      role: 'system',
+      content: 'You are FamBudget Bot. You must return a valid JSON object containing action, reply, expenseProposed (amount, category, date, merchant, notes, paidByName), and confidence. Do not wrap the JSON output in markdown block code fences or include extra text.'
+    },
+    {
+      role: 'user',
+      content: aiPrompt
     }
-  });
+  ];
 
-  return JSON.parse(aiResponse.text || '{}');
+  const responseText = await callGroqChat(messages, true);
+  try {
+    const cleaned = responseText.replace(/```json/i, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch (err: any) {
+    console.error(`[${traceId || 'ParseAI'}] Failed to parse Groq response: "${responseText}"`, err);
+    throw new Error(`Failed to parse Groq response as JSON: ${err.message}`);
+  }
 }
 
 // WhatsApp Real Webhook Helpers
@@ -1000,7 +1164,7 @@ async function handleIncomingMessageFlow(
 ): Promise<string> {
   // 1. Check if there is an active confirmation session
   const session = await WhatsAppSessionModel.findOne({ phoneNumber: phoneIdentifier });
-  
+
   // Programmatic TTL session expiry check (24 hours)
   let activeSession = session;
   if (activeSession) {
@@ -1033,7 +1197,7 @@ async function handleIncomingMessageFlow(
 
       // Look up spender details
       const spender = user.id === exp.paidBy ? user : (await UserModel.findOne({ id: exp.paidBy })) || user;
-      
+
       if (traceId) console.log(`[${traceId}] Expense Confirmed and Logged: ${newExpense.id}`);
       return `✅ *Expense Confirmed and Logged!* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant}\n🏷️ *Category:* ${exp.category}\n👤 *Paid By:* ${spender.name}\n📅 *Date:* ${exp.date}\n📝 *Notes:* ${exp.notes || 'None'}\n\nFamily ledger updated successfully! 🚀`;
     }
@@ -1046,22 +1210,31 @@ async function handleIncomingMessageFlow(
     return `❌ *Confirmation Cancelled!* \n\nThe pending expense proposal has been discarded. Feel free to log a new expense! 🤖`;
   }
 
-  // 4. Pre-parse lazy messages for cost control and speed (Merchant Memory)
+  // 4. Check for programmatic commands to save AI costs (e.g. summary, compare, help, search, categories)
+  if (text && !base64Image) {
+    const programmaticReply = await handleProgrammaticCommand(text);
+    if (programmaticReply) {
+      if (traceId) console.log(`[${traceId}] Intercepted programmatic command: "${text.trim()}"`);
+      return programmaticReply;
+    }
+  }
+
+  // 5. Pre-parse lazy messages for cost control and speed (Merchant Memory)
   let amount: number | null = null;
   let merchant: string | null = null;
   let matchedCategory: string | null = null;
-  
+
   if (text && !base64Image) {
     const lazyMatch = parseLazyMessage(text);
     if (lazyMatch) {
       amount = lazyMatch.amount;
       merchant = lazyMatch.merchant;
-      
+
       // Look up in database to see if we have merchant memory
       const matchedExpense = await ExpenseModel.findOne({
         merchant: { $regex: new RegExp(`^${merchant.trim()}$`, 'i') }
       }).sort({ createdAt: -1 });
-      
+
       if (matchedExpense) {
         matchedCategory = matchedExpense.category;
       }
@@ -1070,7 +1243,7 @@ async function handleIncomingMessageFlow(
 
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-  // 5. If we matched a merchant in memory, auto-save directly!
+  // 6. If we matched a merchant in memory, auto-save directly!
   if (amount !== null && merchant !== null && matchedCategory !== null) {
     // Check for duplicate logged within 10 minutes (by same user)
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
@@ -1126,7 +1299,7 @@ async function handleIncomingMessageFlow(
     return `✅ *Expense Logged!* (Auto-matched Category: *${matchedCategory}*)\n\n💰 *Amount:* ₹${amount}\n🏢 *Merchant:* ${merchant}\n📅 *Date:* ${todayStr}\n👤 *Paid By:* ${user.name}\n\nLive dashboards updated! 🚀`;
   }
 
-  // 6. Otherwise, fall back to Gemini AI parsing (Split OCR and Parser)
+  // 7. Otherwise, fall back to Gemini AI parsing (Split OCR and Parser)
   let ocrData = null;
   if (base64Image) {
     if (traceId) console.log(`[${traceId}] OCR Started`);
@@ -1140,7 +1313,7 @@ async function handleIncomingMessageFlow(
 
   if (parsedResult.action === 'log_expense' && parsedResult.expenseProposed) {
     const exp = parsedResult.expenseProposed;
-    
+
     // Payer determination (never trust AI with raw IDs)
     let paidBy = user.id;
     let groupId = user.groupId;
@@ -1230,7 +1403,7 @@ async function handleIncomingMessageFlow(
         },
         { upsert: true }
       );
-      
+
       if (traceId) console.log(`[${traceId}] Session saved for manual confirmation (confidence ${parsedResult.confidence}%)`);
       return parsedResult.reply;
     }
@@ -1246,7 +1419,7 @@ async function handleIncomingMessageFlow(
     const exp = parsedResult.expenseProposed;
     let paidBy = user.id;
     let groupId = user.groupId;
-    
+
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await WhatsAppSessionModel.updateOne(
       { phoneNumber: phoneIdentifier },
@@ -1359,7 +1532,7 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
     // Find linked user profile by phone number (removing non-digits)
     const cleanFrom = from.replace(/\D/g, '');
     console.log(`[${traceId}] Before user lookup with number: ${cleanFrom}`);
-    
+
     const user = await UserModel.findOne({
       whatsappNumber: cleanFrom
     });
@@ -1375,7 +1548,7 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
       );
       return;
     }
-    
+
     console.log(`[${traceId}] Found linked user details: ${user.name} (${user.id}), Group: ${user.groupId}`);
 
     // Log the user message to simulator chat history
@@ -1515,11 +1688,11 @@ app.post('/api/ai/advisor', authenticateJWT, async (req: any, res) => {
     return res.status(400).json({ error: 'Empty advisor prompt message payload' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || apiKey === 'MOCK_KEY_IF_ABSENT' || apiKey.trim() === '') {
     return res.status(400).json({
-      error: 'GEMINI_API_KEY_MISSING',
-      message: 'GEMINI_API_KEY is not configured in your environment or .env.local. Please add a valid API key to .env.local and restart the server to use the AI Financial Advisor.'
+      error: 'GROQ_API_KEY_MISSING',
+      message: 'GROQ_API_KEY is not configured in your environment or .env.local. Please add a valid API key to .env.local and restart the server to use the AI Financial Advisor.'
     });
   }
 
@@ -1536,7 +1709,7 @@ app.post('/api/ai/advisor', authenticateJWT, async (req: any, res) => {
     // 2. Prepare text context summarizing expenses, groups, and settlements
     const groupsString = dbState.groups.map(g => `- Group ID: ${g.id}, Name: ${g.name}`).join('\n');
     const usersString = dbState.users.map(u => `- Member Name: ${u.name}, ID: ${u.id}, Group ID: ${u.groupId}, Role: ${u.role}`).join('\n');
-    
+
     // Map user IDs to names for readability in expense log
     const userMap: { [id: string]: string } = {};
     dbState.users.forEach(u => {
@@ -1599,27 +1772,20 @@ RULES & STYLE:
       timestamp: new Date().toISOString()
     });
 
-    // 5. Gather chat history for Gemini model context
+    // 5. Gather chat history for Groq model context
     // Fetch all advisor messages for this user (including the new user message we just saved)
     const chatHistory = await AdvisorChatModel.find({ userId }).sort({ timestamp: 1 });
-    
-    // Format messages for the new Gemini Client generateContent API
-    // The history needs to match contents format: [{role: 'user' | 'model', parts: [{text: string}]}]
-    const contents = chatHistory.map(msg => ({
-      role: msg.role,
-      parts: [{ text: msg.text }]
-    }));
 
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents,
-      config: {
-        systemInstruction
-      }
-    });
+    // Format messages for the Groq completions format: [{role: 'system' | 'user' | 'assistant', content: string}]
+    const messages = [
+      { role: 'system', content: systemInstruction },
+      ...chatHistory.map(msg => ({
+        role: msg.role === 'model' ? 'assistant' : 'user',
+        content: msg.text
+      }))
+    ];
 
-    const replyText = response.text || "I apologize, but I could not formulate an advice right now. Please try again.";
+    const replyText = await callGroqChat(messages, false);
 
     // 6. Save model response to MongoDB
     await AdvisorChatModel.create({
@@ -1637,8 +1803,8 @@ RULES & STYLE:
   } catch (error: any) {
     console.error('Advisor Chat Error:', error);
     let message = error.message || 'Unknown server error';
-    if (message.includes('API key not valid') || message.includes('API_KEY_INVALID')) {
-      message = 'The configured GEMINI_API_KEY is invalid. Please double check your key in your .env.local file.';
+    if (message.includes('API key not valid') || message.includes('API_KEY_INVALID') || message.includes('unauthorized') || message.includes('forbidden')) {
+      message = 'The configured GROQ_API_KEY is invalid or unauthorized. Please check your key in your .env.local file.';
     }
     res.status(500).json({ error: 'Failed to run AI Advisor', message });
   }
@@ -1648,7 +1814,7 @@ app.post('/api/ai/advisor/clear', authenticateJWT, async (req: any, res) => {
   try {
     const userId = req.user.id;
     await AdvisorChatModel.deleteMany({ userId });
-    
+
     const state = await getDBState(userId);
     res.json(state);
   } catch (err: any) {
@@ -1725,7 +1891,7 @@ export async function sendDailyWhatsAppReminders(todayStr: string) {
     // 2. Send reminders to all users
     for (const user of users) {
       console.log(`[Reminder Scheduler] Sending WhatsApp reminder to ${user.name} (${user.whatsappNumber})...`);
-      
+
       const messageText = `👋 *Hi ${user.name}!* \n\nThis is your daily reminder from *FamBudget Bot*. 🤖📱\n\nIf you spent anything today, reply directly to this chat (e.g. "Spent 600 at Starbucks for coffee today" or attach a transaction screenshot) to log it! 💰💸`;
 
       await sendWhatsAppMessage(user.whatsappNumber, messageText);
@@ -1748,7 +1914,7 @@ export function startDailyReminderScheduler() {
   console.log('[Reminder Scheduler] Daily WhatsApp reminder scheduler started. Checks daily at 19:30 (7:30 PM) IST.');
   setInterval(async () => {
     const now = new Date();
-    
+
     // Get current time in Asia/Kolkata (IST)
     const timeFormatter = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Kolkata',
@@ -1756,7 +1922,7 @@ export function startDailyReminderScheduler() {
       minute: '2-digit',
       hour12: false
     });
-    
+
     const [istHourStr, istMinStr] = timeFormatter.format(now).split(':');
     const hours = parseInt(istHourStr, 10);
     const minutes = parseInt(istMinStr, 10);
@@ -1770,7 +1936,7 @@ export function startDailyReminderScheduler() {
         day: '2-digit'
       });
       const todayStr = dateFormatter.format(now);
-      
+
       if (lastRunDate !== todayStr) {
         lastRunDate = todayStr;
         await sendDailyWhatsAppReminders(todayStr);
