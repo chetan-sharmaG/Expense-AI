@@ -1523,6 +1523,11 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
     const type = message.type;
     let base64Image: string | undefined;
 
+    if (type !== 'text' && type !== 'image') {
+      console.log(`[${traceId}] Ignoring unsupported webhook message type: ${type}`);
+      return;
+    }
+
     console.log(`[${traceId}] Background Processing Started: from=${from}, type=${type}`);
 
     // Count total users in database to inspect connection state
