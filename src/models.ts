@@ -37,6 +37,7 @@ export interface IWhatsAppSession extends Document {
     originalImage?: string;
   } | null;
   updatedAt: string;
+  expiresAt?: Date;
 }
 
 export interface IExpense extends Document {
@@ -180,6 +181,19 @@ const WhatsAppSessionSchema = new Schema<IWhatsAppSession>({
     merchant:      { type: String },
     originalImage: { type: String }
   },
-  updatedAt:      { type: String, required: true }
+  updatedAt:      { type: String, required: true },
+  expiresAt:      { type: Date }
 });
+WhatsAppSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export const WhatsAppSessionModel = getModel<IWhatsAppSession>('WhatsAppSession', WhatsAppSessionSchema);
+
+// 9. Processed WhatsApp Message Deduplication Schema
+export interface IProcessedMessage extends Document {
+  messageId: string;
+  createdAt: Date;
+}
+const ProcessedMessageSchema = new Schema<IProcessedMessage>({
+  messageId: { type: String, required: true, unique: true },
+  createdAt: { type: Date, required: true, default: Date.now }
+});
+export const ProcessedMessageModel = getModel<IProcessedMessage>('ProcessedMessage', ProcessedMessageSchema);

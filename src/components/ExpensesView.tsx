@@ -35,16 +35,19 @@ interface ExpensesViewProps {
 }
 
 const CATEGORIES = [
-  'Grocery',
-  'Utilities',
-  'Dining Out',
-  'Rent & Living',
-  'Vegetables & Fruits',
+  'Food',
+  'Groceries',
+  'Vegetables',
+  'Fuel',
   'Medical',
   'Entertainment',
-  'Travel & Commute',
+  'Travel',
   'Shopping',
-  'Others'
+  'Bills',
+  'Education',
+  'Rent',
+  'Investments',
+  'Miscellaneous'
 ];
 
 export default function ExpensesView({ 
@@ -75,7 +78,7 @@ export default function ExpensesView({
 
   // Form states
   const [formAmount, setFormAmount] = useState('');
-  const [formCategory, setFormCategory] = useState('Grocery');
+  const [formCategory, setFormCategory] = useState('Groceries');
   const [formPaidBy, setFormPaidBy] = useState(users[0]?.id || '');
   const [formMerchant, setFormMerchant] = useState('');
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
@@ -89,7 +92,7 @@ export default function ExpensesView({
   // Reset Form
   const resetForm = () => {
     setFormAmount('');
-    setFormCategory('Grocery');
+    setFormCategory('Groceries');
     setFormPaidBy(users[0]?.id || '');
     setFormMerchant('');
     setFormDate(new Date().toISOString().split('T')[0]);
