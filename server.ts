@@ -1339,8 +1339,12 @@ app.get('/api/whatsapp/webhook', (req, res) => {
 
 // Background processor helper for webhook messages
 async function processWebhookMessageAsync(message: any, traceId: string): Promise<void> {
+  const from = message?.from;
   try {
-    const from = message.from;
+    if (!from) {
+      console.error(`[${traceId}] Missing message.from in webhook message:`, message);
+      return;
+    }
     const messageId = message.id;
     const text = message.text?.body;
     const type = message.type;
@@ -1419,6 +1423,20 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
     console.log(`[${traceId}] Bot reply logged.`);
   } catch (err: any) {
     console.error(`[${traceId}] PROCESSOR CRASH:`, err);
+    if (from) {
+      try {
+        let friendlyError = "⚠️ *FamBudget Error* \n\nAn unexpected error occurred while processing your message. Please try again later.";
+        const errMsg = err.message || (typeof err === 'string' ? err : '');
+        if (errMsg.includes("prepayment credits are depleted") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+          friendlyError = "⚠️ *FamBudget Billing Error* \n\nYour Gemini API prepayment credits are depleted. Please check your project billing or add credits in Google AI Studio:\n👉 https://aistudio.google.com/app/billing";
+        } else if (errMsg) {
+          friendlyError = `⚠️ *FamBudget Error* \n\nFailed to process message: ${errMsg}`;
+        }
+        await sendWhatsAppMessage(from, friendlyError);
+      } catch (sendErr) {
+        console.error(`[${traceId}] Failed to send error notification back to user via WhatsApp:`, sendErr);
+      }
+    }
   }
 }
 
