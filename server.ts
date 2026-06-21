@@ -1460,12 +1460,10 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     const traceId = `${messageId || 'msg'}-${Date.now()}`;
     console.log(`[${traceId}] Received`);
 
-    // Process asynchronously in the background
-    processWebhookMessageAsync(message, traceId).catch(err => {
-      console.error(`[${traceId}] Error in background processing:`, err);
-    });
+    // Process synchronously to ensure serverless containers don't freeze before completion
+    await processWebhookMessageAsync(message, traceId);
 
-    // Return 200 OK immediately
+    // Return 200 OK
     return res.status(200).send('EVENT_RECEIVED');
   } catch (error: any) {
     console.error('[WhatsApp Webhook] Fatal error processing event:', error);
