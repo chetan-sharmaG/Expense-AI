@@ -1339,77 +1339,87 @@ app.get('/api/whatsapp/webhook', (req, res) => {
 
 // Background processor helper for webhook messages
 async function processWebhookMessageAsync(message: any, traceId: string): Promise<void> {
-  const from = message.from;
-  const messageId = message.id;
-  const text = message.text?.body;
-  const type = message.type;
-  let base64Image: string | undefined;
+  try {
+    const from = message.from;
+    const messageId = message.id;
+    const text = message.text?.body;
+    const type = message.type;
+    let base64Image: string | undefined;
 
-  console.log(`[${traceId}] Background Processing Started: from=${from}, type=${type}`);
+    console.log(`[${traceId}] Background Processing Started: from=${from}, type=${type}`);
 
-  // Find linked user profile by phone number (removing non-digits)
-  const cleanFrom = from.replace(/\D/g, '');
-  console.log(`[${traceId}] Lookup user by whatsappNumber pattern matching: ${cleanFrom}`);
-  
-  const user = await UserModel.findOne({
-    whatsappNumber: { $regex: new RegExp(`^${cleanFrom}$`) }
-  });
+    // Count total users in database to inspect connection state
+    const totalUsers = await UserModel.countDocuments();
+    console.log(`[${traceId}] Total users in DB: ${totalUsers}`);
 
-  if (!user) {
-    console.warn(`[${traceId}] NO LINKED USER FOUND for phone number: ${cleanFrom}`);
-    console.log(`[${traceId}] Dispatching Welcome/Unlinked warning reply to ${from}`);
-    await sendWhatsAppMessage(
-      from,
-      `⚠️ *Welcome to FamilyFunds!* \n\nYour WhatsApp number is not linked to any member profile in our system. \n\n👉 Please log in to the FamilyFunds app, navigate to the *Family & Groups* settings, and link this phone number (*${from}*) to your profile to enable automatic expense logging! 🚀`
-    );
-    return;
-  }
-  
-  console.log(`[${traceId}] Found linked user: ${user.name} (${user.id}), Group: ${user.groupId}`);
+    // Find linked user profile by phone number (removing non-digits)
+    const cleanFrom = from.replace(/\D/g, '');
+    console.log(`[${traceId}] Before user lookup with number: ${cleanFrom}`);
+    
+    const user = await UserModel.findOne({
+      whatsappNumber: cleanFrom
+    });
 
-  // Log the user message to simulator chat history
-  await WhatsAppChatModel.create({
-    id: `real-usr-msg-${Date.now()}`,
-    sender: 'user',
-    senderName: user.name,
-    text: text || `Sent an attachment [${type}] 📁`,
-    timestamp: new Date().toISOString()
-  });
+    console.log(`[${traceId}] After user lookup. Found user:`, user ? `${user.name} (${user.id})` : 'null');
 
-  if (messageId) {
-    await sendTypingIndicator(from, messageId);
-  }
-
-  // Download image if type is image
-  if (type === 'image' && message.image?.id) {
-    console.log(`[${traceId}] Image attachment detected. Media ID: ${message.image.id}`);
-    console.log(`[${traceId}] OCR Started`);
-    try {
-      base64Image = await downloadWhatsAppMedia(message.image.id);
-      console.log(`[${traceId}] OCR Finished. Successfully downloaded image media.`);
-    } catch (err: any) {
-      console.error(`[${traceId}] OCR Failed: Image download failure:`, err);
-      await sendWhatsAppMessage(from, '❌ Failed to process the uploaded image receipt. Please try sending a plain text description.');
+    if (!user) {
+      console.warn(`[${traceId}] NO LINKED USER FOUND for phone number: ${cleanFrom}`);
+      console.log(`[${traceId}] Dispatching Welcome/Unlinked warning reply to ${from}`);
+      await sendWhatsAppMessage(
+        from,
+        `⚠️ *Welcome to FamilyFunds!* \n\nYour WhatsApp number is not linked to any member profile in our system. \n\n👉 Please log in to the FamilyFunds app, navigate to the *Family & Groups* settings, and link this phone number (*${from}*) to your profile to enable automatic expense logging! 🚀`
+      );
       return;
     }
+    
+    console.log(`[${traceId}] Found linked user details: ${user.name} (${user.id}), Group: ${user.groupId}`);
+
+    // Log the user message to simulator chat history
+    await WhatsAppChatModel.create({
+      id: `real-usr-msg-${Date.now()}`,
+      sender: 'user',
+      senderName: user.name,
+      text: text || `Sent an attachment [${type}] 📁`,
+      timestamp: new Date().toISOString()
+    });
+
+    if (messageId) {
+      await sendTypingIndicator(from, messageId);
+    }
+
+    // Download image if type is image
+    if (type === 'image' && message.image?.id) {
+      console.log(`[${traceId}] Image attachment detected. Media ID: ${message.image.id}`);
+      console.log(`[${traceId}] OCR Started`);
+      try {
+        base64Image = await downloadWhatsAppMedia(message.image.id);
+        console.log(`[${traceId}] OCR Finished. Successfully downloaded image media.`);
+      } catch (err: any) {
+        console.error(`[${traceId}] OCR Failed: Image download failure:`, err);
+        await sendWhatsAppMessage(from, '❌ Failed to process the uploaded image receipt. Please try sending a plain text description.');
+        return;
+      }
+    }
+
+    // Run unified message flow processor
+    console.log(`[${traceId}] Processing message flow`);
+    const replyText = await handleIncomingMessageFlow(text, base64Image, user, cleanFrom, false, traceId);
+
+    // Send reply via WhatsApp
+    console.log(`[${traceId}] Reply Sent. Sending reply to ${from}: "${replyText}"`);
+    await sendWhatsAppMessage(from, replyText);
+
+    // Log bot reply to simulator history
+    await WhatsAppChatModel.create({
+      id: `real-bot-msg-${Date.now()}`,
+      sender: 'bot',
+      text: replyText,
+      timestamp: new Date().toISOString()
+    });
+    console.log(`[${traceId}] Bot reply logged.`);
+  } catch (err: any) {
+    console.error(`[${traceId}] PROCESSOR CRASH:`, err);
   }
-
-  // Run unified message flow processor
-  console.log(`[${traceId}] Processing message flow`);
-  const replyText = await handleIncomingMessageFlow(text, base64Image, user, cleanFrom, false, traceId);
-
-  // Send reply via WhatsApp
-  console.log(`[${traceId}] Reply Sent. Sending reply to ${from}: "${replyText}"`);
-  await sendWhatsAppMessage(from, replyText);
-
-  // Log bot reply to simulator history
-  await WhatsAppChatModel.create({
-    id: `real-bot-msg-${Date.now()}`,
-    sender: 'bot',
-    text: replyText,
-    timestamp: new Date().toISOString()
-  });
-  console.log(`[${traceId}] Bot reply logged.`);
 }
 
 // Real WhatsApp Webhook Event Notifications Receiver Endpoint

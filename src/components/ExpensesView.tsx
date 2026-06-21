@@ -75,6 +75,7 @@ export default function ExpensesView({
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
 
   // Form states
   const [formAmount, setFormAmount] = useState('');
@@ -437,14 +438,19 @@ export default function ExpensesView({
                         <td className="py-4 px-6 max-w-[280px]">
                           <div className="flex items-start gap-3">
                             {expense.originalImage ? (
-                              <div className="size-10 rounded bg-emerald-950/40 flex items-center justify-center border border-emerald-900/20 overflow-hidden shrink-0">
+                              <button 
+                                type="button"
+                                onClick={() => setViewerImage(expense.originalImage || null)}
+                                className="size-10 rounded bg-emerald-950/40 flex items-center justify-center border border-emerald-900/20 overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                title="Click to view full image"
+                              >
                                 <img 
                                   src={expense.originalImage} 
                                   alt="receipt preview" 
                                   className="size-full object-cover" 
                                   referrerPolicy="no-referrer"
                                 />
-                              </div>
+                              </button>
                             ) : (
                               <div className="size-10 rounded-lg bg-[#090b11] flex items-center justify-center text-slate-500 shrink-0 border border-white/5">
                                 <Store className="size-5" />
@@ -535,14 +541,19 @@ export default function ExpensesView({
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         {expense.originalImage ? (
-                          <div className="size-10 rounded bg-emerald-950/40 flex items-center justify-center border border-emerald-900/20 overflow-hidden shrink-0">
+                          <button 
+                            type="button"
+                            onClick={() => setViewerImage(expense.originalImage || null)}
+                            className="size-10 rounded bg-emerald-950/40 flex items-center justify-center border border-emerald-900/20 overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                            title="Click to view full image"
+                          >
                             <img 
                               src={expense.originalImage} 
                               alt="receipt preview" 
                               className="size-full object-cover" 
                               referrerPolicy="no-referrer"
                             />
-                          </div>
+                          </button>
                         ) : (
                           <div className="size-10 rounded-lg bg-[#090b11] flex items-center justify-center text-slate-500 shrink-0 border border-white/5">
                             <Store className="size-5" />
@@ -649,12 +660,19 @@ export default function ExpensesView({
                 <div className="bg-[#090b11] border border-white/5 border-dashed rounded-2xl p-4 flex flex-col items-center justify-center text-center">
                   {formImage ? (
                     <div className="flex items-center gap-3 w-full text-left">
-                      <img 
-                        src={formImage} 
-                        alt="loaded bill" 
-                        className="size-16 object-cover rounded border border-white/5 shrink-0" 
-                        referrerPolicy="no-referrer"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => setViewerImage(formImage)}
+                        className="size-16 object-cover rounded border border-white/5 shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                        title="Click to view full image"
+                      >
+                        <img 
+                          src={formImage} 
+                          alt="loaded bill" 
+                          className="size-full object-cover" 
+                          referrerPolicy="no-referrer"
+                        />
+                      </button>
                       <div className="overflow-hidden flex-1">
                         <p className="text-xs font-semibold text-slate-200 truncate">Image attachment uploaded</p>
                         <button 
@@ -974,6 +992,33 @@ export default function ExpensesView({
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Full Image Viewer Lightbox */}
+      {viewerImage && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 cursor-zoom-out"
+          onClick={() => setViewerImage(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors cursor-pointer z-[70] flex items-center justify-center"
+            onClick={() => setViewerImage(null)}
+          >
+            <X className="size-6" />
+          </button>
+          <div 
+            className="relative max-w-full max-h-full flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={viewerImage}
+              alt="Full receipt view"
+              className="max-w-[95vw] max-h-[85vh] md:max-w-[90vw] md:max-h-[90vh] object-contain rounded-lg border border-white/10 shadow-2xl"
+              referrerPolicy="no-referrer"
+            />
           </div>
         </div>
       )}
