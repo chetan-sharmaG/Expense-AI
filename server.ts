@@ -860,75 +860,98 @@ async function handleProgrammaticCommand(text: string): Promise<string | null> {
 // WhatsApp AI Parsing helper
 // Receipt OCR using server-side Gemini
 async function runOcrOnReceipt(base64Image: string): Promise<{ amount: number; merchant: string; date: string; notes?: string } | null> {
-  try {
-    const ai = getAiClient();
-    const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
+  const models = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+  
+  for (const model of models) {
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+      try {
+        console.log(`[OCR Helper] Attempting OCR with model: ${model} (attempt ${attempts + 1}/${maxAttempts})...`);
+        const ai = getAiClient();
+        const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
 
-    const prompt = `
-      You are an expert financial receipt reader. Please parse this payment screenshot (e.g., GPay, PhonePe, Paytm, BHIM, or static physical bill/receipt) and extract critical data.
-      Analyze text, merchant details, payment confirmation, bank accounts numbers or reference IDs, and transaction amount very carefully.
-      
-      Look for payment confirmation status. Try to guess the appropriate category from standard options:
-      - Food
-      - Groceries
-      - Vegetables
-      - Fuel
-      - Medical
-      - Entertainment
-      - Travel
-      - Shopping
-      - Bills
-      - Education
-      - Rent
-      - Investments
-      - Miscellaneous
-      
-      Return ONLY a raw JSON structure matching these properties:
-      {
-        "amount": number,
-        "merchant": "string",
-        "date": "YYYY-MM-DD",
-        "notes": "short description"
-      }
-    `;
+        const prompt = `
+          You are an expert financial receipt reader. Please parse this payment screenshot (e.g., GPay, PhonePe, Paytm, BHIM, or static physical bill/receipt) and extract critical data.
+          Analyze text, merchant details, payment confirmation, bank accounts numbers or reference IDs, and transaction amount very carefully.
+          
+          Look for payment confirmation status. Try to guess the appropriate category from standard options:
+          - Food
+          - Groceries
+          - Vegetables
+          - Fuel
+          - Medical
+          - Entertainment
+          - Travel
+          - Shopping
+          - Bills
+          - Education
+          - Rent
+          - Investments
+          - Miscellaneous
+          
+          Return ONLY a raw JSON structure matching these properties:
+          {
+            "amount": number,
+            "merchant": "string",
+            "date": "YYYY-MM-DD",
+            "notes": "short description"
+          }
+        `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: [
-        {
-          inlineData: {
-            mimeType: 'image/png',
-            data: base64Data
+        const response = await ai.models.generateContent({
+          model: model,
+          contents: [
+            {
+              inlineData: {
+                mimeType: 'image/png',
+                data: base64Data
+              }
+            },
+            { text: prompt }
+          ],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              required: ['amount', 'merchant', 'date'],
+              properties: {
+                amount: { type: Type.NUMBER, description: 'The absolute total amount of the transaction.' },
+                merchant: { type: Type.STRING, description: 'The business name or payee identity.' },
+                date: { type: Type.STRING, description: 'Date of expenditure in YYYY-MM-DD format.' },
+                notes: { type: Type.STRING, description: 'Short summary note about the invoice payment.' }
+              }
+            }
           }
-        },
-        { text: prompt }
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ['amount', 'merchant', 'date'],
-          properties: {
-            amount: { type: Type.NUMBER, description: 'The absolute total amount of the transaction.' },
-            merchant: { type: Type.STRING, description: 'The business name or payee identity.' },
-            date: { type: Type.STRING, description: 'Date of expenditure in YYYY-MM-DD format.' },
-            notes: { type: Type.STRING, description: 'Short summary note about the invoice payment.' }
-          }
+        });
+
+        const parsedData = JSON.parse(response.text || '{}');
+        console.log(`[OCR Helper] OCR successful with model: ${model}`);
+        return {
+          amount: Number(parsedData.amount) || 0,
+          merchant: parsedData.merchant || 'Unknown Merchant',
+          date: parsedData.date || new Date().toISOString().split('T')[0],
+          notes: parsedData.notes || ''
+        };
+      } catch (error: any) {
+        attempts++;
+        console.warn(`[OCR Helper] Attempt ${attempts} failed for model ${model}. Error:`, error.message || error);
+        
+        const isDepleted = error.message && (error.message.includes('prepayment credits') || error.message.includes('RESOURCE_EXHAUSTED') || error.message.includes('API_KEY_INVALID'));
+        if (isDepleted && attempts >= 1) {
+          break;
+        }
+
+        if (attempts < maxAttempts) {
+          const delay = Math.pow(2, attempts) * 250;
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
-    });
-
-    const parsedData = JSON.parse(response.text || '{}');
-    return {
-      amount: Number(parsedData.amount) || 0,
-      merchant: parsedData.merchant || 'Unknown Merchant',
-      date: parsedData.date || new Date().toISOString().split('T')[0],
-      notes: parsedData.notes || ''
-    };
-  } catch (error: any) {
-    console.error('[OCR Helper] Receipt OCR Extraction Failure:', error);
-    return null;
+    }
   }
+  
+  console.error('[OCR Helper] All receipt OCR models and attempts failed.');
+  return null;
 }
 
 // WhatsApp Bot Chat Integration via AI Simulator
