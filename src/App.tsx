@@ -635,7 +635,10 @@ export default function App() {
         <div className="p-6 space-y-8">
           
           {/* Brand header */}
-          <div className="flex items-center gap-3">
+          <div 
+            onClick={() => setActiveTab('dashboard')} 
+            className="flex items-center gap-3 cursor-pointer hover:opacity-90 transition-opacity"
+          >
             <div className="w-9 h-9 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white shadow-lg flex items-center justify-center font-bold font-mono">
               F
             </div>
@@ -707,7 +710,10 @@ export default function App() {
 
       {/* 2. MOBILE Header with burger toggle drawer */}
       <header className="lg:hidden bg-[#090b11] text-white p-4 flex items-center justify-between border-b border-white/5 shrink-0">
-        <div className="flex items-center gap-2.5">
+        <div 
+          onClick={() => setActiveTab('dashboard')} 
+          className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition-opacity"
+        >
           <div className="size-8 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white flex items-center justify-center font-bold text-xs">
             F
           </div>

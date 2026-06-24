@@ -1758,6 +1758,14 @@ ${settlementsString}
 Current Date Today: ${today}
 Current User Chatting with you: ${user.name} (Group: ${groupMap[user.groupId] || user.groupId})
 
+CRITICAL READ-ONLY RULES:
+1. You are strictly a **READ-ONLY** advisor. You CANNOT add, create, modify, delete, log, or track expenses or settlements.
+2. If the user tells you to add, log, or track an expense (e.g., "I spent 600 on coffee", "add petrol 500", "log 1000 for groceries"), you MUST politely explain that you are a read-only advisor and do not have write access to the database.
+3. You must instruct the user to add the expense using the proper channels:
+   - Use the **Log Expense** / **Add Expense** button in the dashboard or ledger tabs in this web application.
+   - Message the **WhatsApp Bot** directly to log expenses using natural language.
+4. NEVER hallucinate, pretend, or tell the user that you have added, logged, or saved an expense or settlement.
+
 RULES & STYLE:
 1. Be polite, encouraging, professional yet warm, using finance/wealth metaphors when appropriate.
 2. Structure your response using markdown. Use tables, bold headers, list bullet points, and highlight metrics (like ₹ amounts) to make it visually premium and readable.
@@ -1878,116 +1886,6 @@ app.delete('/api/settlements/:id', authenticateJWT, async (req: any, res) => {
   }
 });
 
-// Outgoing Daily WhatsApp Reminders Helper
-let lastRunDate: string = '';
-
-export async function sendDailyWhatsAppReminders(todayStr: string) {
-  console.log(`[Reminder Scheduler] Sending daily reminders to all users for date: ${todayStr}`);
-  try {
-    // 1. Fetch all users with registered WhatsApp numbers
-    const users = await UserModel.find({ whatsappNumber: { $exists: true, $ne: '' } });
-    if (users.length === 0) {
-      console.log('[Reminder Scheduler] No users found with linked WhatsApp numbers.');
-      return;
-    }
-
-    console.log(`[Reminder Scheduler] Sending reminders to ${users.length} users.`);
-
-    // 2. Send reminders to all users
-    for (const user of users) {
-      console.log(`[Reminder Scheduler] Sending WhatsApp reminder to ${user.name} (${user.whatsappNumber})...`);
-
-      const messageText = `👋 *Hi ${user.name}!* \n\nThis is your daily reminder from *FamBudget Bot*. 🤖📱\n\nIf you spent anything today, reply directly to this chat (e.g. "Spent 600 at Starbucks for coffee today" or attach a transaction screenshot) to log it! 💰💸`;
-
-      await sendWhatsAppMessage(user.whatsappNumber, messageText);
-
-      // Also log this outgoing bot message in the WhatsApp Chat history so it shows in the UI
-      await WhatsAppChatModel.create({
-        id: `bot-reminder-${Date.now()}-${user.id}`,
-        sender: 'bot',
-        text: messageText,
-        timestamp: new Date().toISOString()
-      });
-    }
-  } catch (err) {
-    console.error('[Reminder Scheduler] Error running daily reminders:', err);
-  }
-}
-
-// Background scheduler checker running every 30 seconds
-export function startDailyReminderScheduler() {
-  console.log('[Reminder Scheduler] Daily WhatsApp reminder scheduler started. Checks daily at 19:30 (7:30 PM) IST.');
-  setInterval(async () => {
-    const now = new Date();
-
-    // Get current time in Asia/Kolkata (IST)
-    const timeFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-
-    const [istHourStr, istMinStr] = timeFormatter.format(now).split(':');
-    const hours = parseInt(istHourStr, 10);
-    const minutes = parseInt(istMinStr, 10);
-
-    if (hours === 19 && minutes === 30) {
-      // Get date string in Asia/Kolkata (IST)
-      const dateFormatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      });
-      const todayStr = dateFormatter.format(now);
-
-      if (lastRunDate !== todayStr) {
-        lastRunDate = todayStr;
-        await sendDailyWhatsAppReminders(todayStr);
-      }
-    }
-  }, 30000);
-}
-
-// Manual testing route to force-trigger daily reminders immediately
-app.post('/api/test/trigger-reminders', authenticateJWT, async (req: any, res) => {
-  try {
-    const now = new Date();
-    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-    const todayStr = dateFormatter.format(now);
-    await sendDailyWhatsAppReminders(todayStr);
-    res.json({ success: true, message: 'Daily WhatsApp reminders triggered successfully.' });
-  } catch (err: any) {
-    res.status(550).json({ error: 'Failed to trigger reminders', message: err.message });
-  }
-});
-
-// Public trigger route for local testing or Vercel Cron
-app.all('/api/cron/reminders', async (req: any, res) => {
-  console.log('[Cron Endpoint] Daily reminders cron triggered manually/externally.');
-  try {
-    const now = new Date();
-    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-    const todayStr = dateFormatter.format(now);
-    await sendDailyWhatsAppReminders(todayStr);
-    res.json({ success: true, message: `Daily WhatsApp reminders triggered successfully for ${todayStr}.` });
-  } catch (err: any) {
-    console.error('[Cron Endpoint] Trigger failed:', err);
-    res.status(500).json({ error: 'Failed to trigger reminders', message: err.message });
-  }
-});
-
 // ------------------- VITE & STATIC HANDLING -------------------
 export async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -2005,9 +1903,6 @@ export async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
-
-  // Start the background WhatsApp reminder scheduler
-  startDailyReminderScheduler();
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully started on port http://localhost:${PORT}`);

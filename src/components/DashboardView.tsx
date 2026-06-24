@@ -145,6 +145,48 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
     });
   }, [expenses]);
 
+  // 6. Monthly Spending History
+  const monthlyWiseSpends = useMemo(() => {
+    const monthlyMap: { [key: string]: number } = {};
+    expenses.forEach(exp => {
+      if (!exp.date) return;
+      const parts = exp.date.split('-');
+      if (parts.length >= 2) {
+        const year = parts[0];
+        const month = parts[1];
+        if (year.length === 4 && month.length === 2) {
+          const yearMonth = `${year}-${month}`;
+          monthlyMap[yearMonth] = (monthlyMap[yearMonth] || 0) + exp.amount;
+          return;
+        }
+      }
+      
+      // Fallback for other formats, try using JS Date
+      try {
+        const d = new Date(exp.date);
+        if (!isNaN(d.getTime())) {
+          const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          monthlyMap[yearMonth] = (monthlyMap[yearMonth] || 0) + exp.amount;
+        }
+      } catch (e) {
+        // ignore invalid dates
+      }
+    });
+
+    return Object.keys(monthlyMap)
+      .sort((a, b) => b.localeCompare(a)) // Sort latest month first
+      .map(ym => {
+        const [year, month] = ym.split('-');
+        const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+        const monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+        return {
+          key: ym,
+          monthName,
+          amount: monthlyMap[ym]
+        };
+      });
+  }, [expenses]);
+
   return (
     <div className="space-y-6">
       {/* Welcome Bar */}
@@ -156,12 +198,6 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
           <p className="text-slate-355 text-sm mt-1 font-semibold">
             Private Multi-Group Family ledger, smart receipt scanner & balance settlements.
           </p>
-        </div>
-        <div className="flex items-center gap-3 relative z-10">
-          <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-450 rounded-full text-xs font-semibold shrink-0">
-            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            WhatsApp Bot Active
-          </div>
         </div>
         <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-emerald-500 rounded-full opacity-[0.03]"></div>
       </div>
@@ -406,6 +442,53 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
           </div>
         </div>
 
+      </div>
+
+      {/* Monthly wise spends / Past Spends History */}
+      <div className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm space-y-4 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <Calendar className="size-5 text-emerald-450" />
+          <div>
+            <h3 className="text-white font-semibold font-sans text-base">Monthly Spending History</h3>
+            <p className="text-slate-500 text-xs">Overview of monthly historical family spending logs</p>
+          </div>
+        </div>
+
+        {monthlyWiseSpends.length === 0 ? (
+          <p className="text-slate-500 text-center py-6 text-sm">No historical monthly spends recorded.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {monthlyWiseSpends.map((item, idx) => {
+              const maxSpend = Math.max(...monthlyWiseSpends.map(m => m.amount));
+              const relativePercentage = maxSpend > 0 ? (item.amount / maxSpend) * 100 : 0;
+              
+              return (
+                <div key={item.key} className="bg-[#090b11]/60 p-4 rounded-xl border border-white/5 hover:border-emerald-500/30 transition flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-400">{item.monthName}</span>
+                    <span className="text-[10px] text-slate-500 font-mono font-bold">
+                      #{idx + 1}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold font-mono text-white">₹{item.amount.toLocaleString('en-IN')}</h4>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="w-full bg-[#111420] rounded-full h-1.5 border border-white/5 overflow-hidden">
+                      <div 
+                        className="h-1.5 rounded-full bg-emerald-500" 
+                        style={{ width: `${relativePercentage}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-550 font-mono font-bold block text-right">
+                      {Math.round(relativePercentage)}% of peak month
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
     </div>
