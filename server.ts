@@ -937,10 +937,11 @@ async function parseExpenseWithAi(
   text?: string,
   ocrData?: { amount: number; merchant: string; date: string; notes?: string } | null,
   senderUser?: any,
+  activeSession?: any,
   traceId?: string
 ) {
   if (traceId) {
-    console.log(`[${traceId}] parseExpenseWithAi called. text="${text || ''}" ocrData=${JSON.stringify(ocrData)}`);
+    console.log(`[${traceId}] parseExpenseWithAi called. text="${text || ''}" ocrData=${JSON.stringify(ocrData)} hasActiveSession=${!!activeSession}`);
   }
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const ai = getAiClient();
@@ -990,6 +991,20 @@ ${stats.recentExpenses.map(e => `- Date: ${e.date}, Amount: ₹${e.amount}, Merc
   `;
 
   let userIntentDescription = "";
+  if (activeSession && activeSession.pendingExpense) {
+    const pending = activeSession.pendingExpense;
+    const pendingPayerName = usersList.find(u => u.id === pending.paidBy)?.name || 'Unknown';
+    userIntentDescription += `PENDING SESSION PROPOSAL IN PROGRESS:
+We currently have a pending expense proposal in the user's active session waiting for their confirmation:
+- Amount: ₹${pending.amount}
+- Merchant: "${pending.merchant || 'Unknown'}"
+- Category: "${pending.category || 'Miscellaneous'}"
+- Paid By: "${pendingPayerName}"
+- Date: "${pending.date || today}"
+- Notes: "${pending.notes || ''}"
+The user's new message is likely responding to this proposal by confirming it (possibly with edits/corrections, e.g. "add note as X and confirm it", "change amount to Y and confirm", "yes confirm it") or cancelling it ("actually discard it", "no cancel").\n\n`;
+  }
+
   if (text) {
     userIntentDescription += `User text input: "${text}"\n`;
   }
@@ -1023,16 +1038,20 @@ ${stats.recentExpenses.map(e => `- Date: ${e.date}, Amount: ₹${e.amount}, Merc
     1. Interpret the user input:
        ${userIntentDescription}
     2. Determine the ACTION:
-       - If they want to log an expense (e.g. "Swiggy 500", "Paid ₹300 for medicine", or receipt details were extracted): action = "log_expense".
+       - If they want to log/save/confirm the proposed expense (e.g. "confirm", "yes", "save it", or "add note X and confirm"): action = "log_expense".
+       - If they want to discard/cancel the proposal (e.g. "cancel", "no cancel", "discard it"): action = "cancel_expense".
        - If they are asking a question about statistics, balances, spending, or savings: action = "ask_question".
-       - If crucial details (like amount) are missing from their intent to log an expense: action = "need_clarification".
+       - If crucial details (like amount) are missing: action = "need_clarification".
     3. If action is "log_expense":
-       - Extract: amount (number), merchant, date (YYYY-MM-DD or today), category (map to standard categories), notes.
+       - Merge any corrections/details from the user input with the pending session proposal (if one exists). For example, if they say "add note as spend for friend and confirm it", the notes should be updated to "spend for friend", and other details (amount, category, merchant) should be carried over from the pending proposal.
+       - Extract the final details: amount (number), merchant, date (YYYY-MM-DD or today), category (map to standard categories), notes.
        - Identify if a specific family member paid (e.g., "Naveen paid 300"). If explicitly mentioned, output their name in "paidByName". Otherwise leave blank.
-       - Assign a "confidence" score (0-100) based on how complete/clear the details are. If OCR data is provided and matches user intent, confidence should be high (e.g., >= 90).
-    4. If action is "ask_question":
+       - Assign a "confidence" score (0-100). If it is a confirmation of a pending proposal (with or without corrections), or details are fully complete, set confidence high (e.g., >= 95) so it auto-logs.
+    4. If action is "cancel_expense":
+       - Return a reply indicating that the proposal has been cancelled (e.g. "❌ *Confirmation Cancelled!* ...").
+    5. If action is "ask_question":
        - Formulate a detailed financial reply based ONLY on the CURRENT FINANCIAL STATISTICS CONTEXT. Use standard WhatsApp markdown formatting (e.g. *bold*, list points).
-    5. Outputs structure in raw JSON matching the required schema.
+    6. Outputs structure in raw JSON matching the required schema.
   `;
 
   const messages = [
@@ -1308,7 +1327,7 @@ async function handleIncomingMessageFlow(
   }
 
   if (traceId) console.log(`[${traceId}] Sending to Expense Parser Agent`);
-  const parsedResult = await parseExpenseWithAi(text, ocrData, user, traceId);
+  const parsedResult = await parseExpenseWithAi(text, ocrData, user, activeSession, traceId);
   if (traceId) console.log(`[${traceId}] AI Parser output action: ${parsedResult.action}, confidence: ${parsedResult.confidence}`);
 
   if (parsedResult.action === 'log_expense' && parsedResult.expenseProposed) {
@@ -1413,6 +1432,13 @@ async function handleIncomingMessageFlow(
   // If action is ask_question, return the reply directly
   if (parsedResult.action === 'ask_question') {
     return parsedResult.reply;
+  }
+
+  // If action is cancel_expense, clear the active session and return the reply
+  if (parsedResult.action === 'cancel_expense') {
+    await WhatsAppSessionModel.deleteOne({ phoneNumber: phoneIdentifier });
+    if (traceId) console.log(`[${traceId}] Confirmation cancelled by user via AI.`);
+    return parsedResult.reply || `❌ *Confirmation Cancelled!* \n\nThe pending expense proposal has been discarded.`;
   }
 
   // Fallback for need_clarification
