@@ -1405,7 +1405,8 @@ async function handleIncomingMessageFlow(
       );
 
       if (traceId) console.log(`[${traceId}] Session saved for manual confirmation (confidence ${parsedResult.confidence}%)`);
-      return parsedResult.reply;
+      const payer = user.id === paidBy ? user : (await UserModel.findOne({ id: paidBy })) || user;
+      return `🤔 *Please confirm this expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n📝 *Notes:* ${exp.notes || 'None'}\n\nReply *yes* / *confirm* to log it, or *no* / *cancel* to discard. 🤖`;
     }
   }
 
