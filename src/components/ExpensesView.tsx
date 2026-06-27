@@ -25,6 +25,7 @@ import {
 
 interface ExpensesViewProps {
   state: DBState;
+  currentUser?: any;
   onAddExpense: (exp: Omit<Expense, 'id' | 'groupId' | 'createdAt'>, imageBase64?: string) => Promise<void>;
   onEditExpense: (id: string, updated: Partial<Expense>) => Promise<void>;
   onDeleteExpense: (id: string) => Promise<void>;
@@ -52,6 +53,7 @@ const CATEGORIES = [
 
 export default function ExpensesView({ 
   state, 
+  currentUser,
   onAddExpense, 
   onEditExpense, 
   onDeleteExpense,
@@ -431,6 +433,7 @@ export default function ExpensesView({
                   {filteredExpenses.map((expense) => {
                     const spender = users.find(u => u.id === expense.paidBy);
                     const grp = groups.find(g => g.id === expense.groupId);
+                    const canModify = !currentUser || expense.paidBy === currentUser.id;
                     
                     return (
                       <tr key={expense.id} className="hover:bg-[#090b11]/30 transition-colors border-b border-white/5">
@@ -499,24 +502,24 @@ export default function ExpensesView({
                             <button 
                               type="button"
                               id={`btn-edit-${expense.id}`}
-                              disabled={isSyncing}
+                              disabled={isSyncing || !canModify}
                               onClick={() => handleOpenEdit(expense)}
                               className="p-1.5 hover:bg-[#1a1e30] text-slate-400 hover:text-emerald-450 rounded-md transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                              title="Edit receipt"
+                              title={canModify ? "Edit receipt" : "Only the spender can edit this"}
                             >
                               <Edit3 className="size-4" />
                             </button>
                             <button 
                               type="button"
                               id={`btn-delete-${expense.id}`}
-                              disabled={isSyncing}
+                              disabled={isSyncing || !canModify}
                               onClick={() => {
                                 if (confirm('Are you sure you want to delete this expenditure?')) {
                                   onDeleteExpense(expense.id);
                                 }
                               }}
                               className="p-1.5 hover:bg-rose-950/30 text-rose-400 hover:text-rose-350 rounded-md transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                              title="Delete receipt"
+                              title={canModify ? "Delete receipt" : "Only the spender can delete this"}
                             >
                               <Trash2 className="size-4" />
                             </button>
@@ -534,6 +537,7 @@ export default function ExpensesView({
               {filteredExpenses.map((expense) => {
                 const spender = users.find(u => u.id === expense.paidBy);
                 const grp = groups.find(g => g.id === expense.groupId);
+                const canModify = !currentUser || expense.paidBy === currentUser.id;
                 
                 return (
                   <div key={expense.id} className="p-4 space-y-3 hover:bg-[#090b11]/20 transition-colors">
@@ -601,22 +605,24 @@ export default function ExpensesView({
                       <button 
                         type="button"
                         id={`mob-btn-edit-${expense.id}`}
-                        disabled={isSyncing}
+                        disabled={isSyncing || !canModify}
                         onClick={() => handleOpenEdit(expense)}
                         className="px-3 py-1.5 bg-[#1a1e30] hover:bg-[#252b44] text-slate-200 border border-white/5 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title={canModify ? "Edit receipt" : "Only the spender can edit this"}
                       >
                         <Edit3 className="size-3.5" /> Edit
                       </button>
                       <button 
                         type="button"
                         id={`mob-btn-delete-${expense.id}`}
-                        disabled={isSyncing}
+                        disabled={isSyncing || !canModify}
                         onClick={() => {
                           if (confirm('Are you sure you want to delete this expenditure?')) {
                             onDeleteExpense(expense.id);
                           }
                         }}
                         className="px-3 py-1.5 bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border border-rose-900/20 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title={canModify ? "Delete receipt" : "Only the spender can delete this"}
                       >
                         <Trash2 className="size-3.5" /> Delete
                       </button>

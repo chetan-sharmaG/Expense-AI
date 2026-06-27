@@ -10,6 +10,7 @@ import ExpensesView from './components/ExpensesView';
 import SettlementView from './components/SettlementView';
 import FamilyView from './components/FamilyView';
 import AdvisorView from './components/AdvisorView';
+import AnalysisView from './components/AnalysisView';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { 
   BarChart3, 
@@ -480,6 +481,7 @@ export default function App() {
   // Navigation Items
   const navItems = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3 },
+    { id: 'analysis', name: 'Analysis', icon: Activity },
     { id: 'expenses', name: 'Family Ledger', icon: Receipt },
     { id: 'settlement', name: 'Settlement Engine', icon: WalletCards },
     { id: 'family', name: 'Family & Groups', icon: Users2 },
@@ -910,10 +912,19 @@ export default function App() {
               } 
             />
             <Route 
+              path="/analysis" 
+              element={
+                <AnalysisView 
+                  state={dbState} 
+                />
+              } 
+            />
+            <Route 
               path="/expenses" 
               element={
                 <ExpensesView 
                   state={dbState}
+                  currentUser={currentUser}
                   onAddExpense={handleAddExpense}
                   onEditExpense={handleEditExpense}
                   onDeleteExpense={handleDeleteExpense}
