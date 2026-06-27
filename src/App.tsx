@@ -32,7 +32,17 @@ import {
 
 export default function App() {
   const [dbState, setDbState] = useState<DBState | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const path = window.location.pathname.replace(/^\//, '');
+    const validTabs = ['dashboard', 'expenses', 'settlement', 'family', 'advisor'];
+    return validTabs.includes(path) ? path : 'dashboard';
+  });
+
+  const navigateToTab = (tabId: string) => {
+    setActiveTab(tabId);
+    window.history.pushState({ tab: tabId }, '', `/${tabId}`);
+  };
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [triggerAddExpense, setTriggerAddExpense] = useState(false);
@@ -97,6 +107,34 @@ export default function App() {
       mainEl.scrollTop = 0;
     }
   }, [activeTab]);
+
+  // Synchronize history navigation (back/forward buttons)
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.replace(/^\//, '') || 'dashboard';
+      const validTabs = ['dashboard', 'expenses', 'settlement', 'family', 'advisor'];
+      if (validTabs.includes(path)) {
+        setActiveTab(path);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Sync initial URL path on successful authentication
+  useEffect(() => {
+    if (userToken && currentUser) {
+      const path = window.location.pathname.replace(/^\//, '');
+      const validTabs = ['dashboard', 'expenses', 'settlement', 'family', 'advisor'];
+      if (!validTabs.includes(path)) {
+        window.history.replaceState({ tab: 'dashboard' }, '', '/dashboard');
+        setActiveTab('dashboard');
+      } else {
+        window.history.replaceState({ tab: path }, '', `/${path}`);
+        setActiveTab(path);
+      }
+    }
+  }, [userToken, currentUser]);
 
   // Auth Headers helper
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
@@ -204,7 +242,7 @@ export default function App() {
       if (res.ok) {
         const body = await res.json();
         setDbState(body.data);
-        setActiveTab('dashboard');
+        navigateToTab('dashboard');
       }
     } catch (e) {
       console.error(e);
@@ -224,7 +262,7 @@ export default function App() {
       if (res.ok) {
         const body = await res.json();
         setDbState(body.state);
-        setActiveTab('dashboard');
+        navigateToTab('dashboard');
       }
     } catch (e) {
       console.error(e);
@@ -665,7 +703,7 @@ export default function App() {
           
           {/* Brand header */}
           <div 
-            onClick={() => setActiveTab('dashboard')} 
+            onClick={() => navigateToTab('dashboard')} 
             className="flex items-center gap-3 cursor-pointer hover:opacity-90 transition-opacity"
           >
             <div className="w-9 h-9 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white shadow-lg flex items-center justify-center font-bold font-mono">
@@ -688,7 +726,7 @@ export default function App() {
                   key={item.id}
                   type="button"
                   id={`side-nav-${item.id}`}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => navigateToTab(item.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium tracking-wide transition-all cursor-pointer ${
                     isActive 
                       ? 'bg-emerald-950/30 text-emerald-450 border-l-2 border-emerald-500 font-bold shadow-inner' 
@@ -750,7 +788,7 @@ export default function App() {
       {/* 2. MOBILE Header with burger toggle drawer */}
       <header className="lg:hidden bg-[#090b11] text-white p-4 flex items-center justify-between border-b border-white/5 shrink-0">
         <div 
-          onClick={() => setActiveTab('dashboard')} 
+          onClick={() => navigateToTab('dashboard')} 
           className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition-opacity"
         >
           <div className="size-8 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white flex items-center justify-center font-bold text-xs">
@@ -770,7 +808,7 @@ export default function App() {
           </button>
           <button
             onClick={() => {
-              setActiveTab('expenses');
+              navigateToTab('expenses');
               setTriggerAddExpense(true);
             }}
             className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-650 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
@@ -809,7 +847,7 @@ export default function App() {
                   type="button"
                   id={`mobile-nav-${item.id}`}
                   onClick={() => {
-                    setActiveTab(item.id);
+                    navigateToTab(item.id);
                     setMobileMenuOpen(false);
                   }}
                   className={`flex items-center gap-2.5 p-3 rounded-lg text-xs font-semibold ${
@@ -871,14 +909,14 @@ export default function App() {
             <button
               onClick={fetchState}
               disabled={isSyncing}
-              className={`p-2 bg-white/5 hover:bg-white/10 text-slate-350 hover:text-white rounded-xl border border-white/5 transition-all flex items-center justify-center cursor-pointer ${isSyncing ? 'animate-spin opacity-50' : ''}`}
+              className={`p-2 bg-white/5 hover:bg-white/10 text-slate-355 hover:text-white rounded-xl border border-white/5 transition-all flex items-center justify-center cursor-pointer ${isSyncing ? 'animate-spin opacity-50' : ''}`}
               title="Refresh database data"
             >
               <RefreshCw className="size-4" />
             </button>
             <button
               onClick={() => {
-                setActiveTab('expenses');
+                navigateToTab('expenses');
                 setTriggerAddExpense(true);
               }}
               className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-650 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950/20 flex items-center gap-1.5 cursor-pointer"
@@ -895,7 +933,7 @@ export default function App() {
           {activeTab === 'dashboard' && (
             <DashboardView 
               state={dbState} 
-              onNavigate={(id) => setActiveTab(id)} 
+              onNavigate={(id) => navigateToTab(id)} 
             />
           )}
 
