@@ -1182,6 +1182,57 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   }
 }
 
+async function sendWhatsAppInteractiveButtons(to: string, bodyText: string, buttons: { id: string; title: string }[]): Promise<void> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneNumberId) {
+    console.warn('[WhatsApp] WhatsApp tokens or Phone Number ID not configured (Buttons).');
+    return;
+  }
+
+  // Formatting constraints: up to 3 buttons, title max 20 chars
+  const actionButtons = buttons.slice(0, 3).map((btn) => ({
+    type: 'reply',
+    reply: {
+      id: btn.id,
+      title: btn.title.slice(0, 20)
+    }
+  }));
+
+  const url = `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`;
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: {
+        text: bodyText
+      },
+      action: {
+        buttons: actionButtons
+      }
+    }
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[WhatsApp] Failed to send interactive buttons to ${to}:`, errText);
+  } else {
+    console.log(`[WhatsApp] Interactive buttons successfully sent to ${to}`);
+  }
+}
+
 async function sendTypingIndicator(to: string, messageId: string): Promise<void> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -1226,7 +1277,7 @@ async function handleIncomingMessageFlow(
   phoneIdentifier: string,
   isSimulator: boolean,
   traceId?: string
-): Promise<string> {
+): Promise<string | { text: string; buttons?: { id: string; title: string }[] }> {
   // 1. Check if there is an active confirmation session
   const session = await WhatsAppSessionModel.findOne({ phoneNumber: phoneIdentifier });
 
@@ -1423,7 +1474,13 @@ async function handleIncomingMessageFlow(
       );
 
       if (traceId) console.log(`[${traceId}] Possible Duplicate Detected (AI Parse): ₹${exp.amount} at ${exp.merchant}`);
-      return `⚠️ *Possible Duplicate Detected!* \n\nIt looks like an expense of *₹${exp.amount}* at *${exp.merchant}* was already logged in the last 10 minutes.\n\nDo you want to log it again anyway? Reply *confirm* / *yes* to save, or *cancel* to skip.`;
+      return {
+        text: `⚠️ *Possible Duplicate Detected!* \n\nIt looks like an expense of *₹${exp.amount}* at *${exp.merchant}* was already logged in the last 10 minutes.\n\nDo you want to log it again anyway?`,
+        buttons: [
+          { id: 'confirm_yes', title: 'Confirm & Save' },
+          { id: 'confirm_no', title: 'Cancel' }
+        ]
+      };
     }
 
     const hasImage = !!base64Image;
@@ -1478,10 +1535,22 @@ async function handleIncomingMessageFlow(
 
       // If it is a screenshot and no note was found, ask the user if they want to add a note
       if (hasImage && !hasNote) {
-        return `🤔 *I detected a screenshot expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n\n*No note was found in the screenshot.* Do you want to add any notes before logging this? Reply with your note text, or reply *no* / *confirm* to save without notes. 🤖`;
+        return {
+          text: `🤔 *I detected a screenshot expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n\n*No note was found in the screenshot.* Do you want to add any notes before logging this? Reply with your note text, or click *Confirm & Save* below to log without notes. 🤖`,
+          buttons: [
+            { id: 'confirm_yes', title: 'Confirm & Save' },
+            { id: 'confirm_no', title: 'Cancel' }
+          ]
+        };
       }
 
-      return `🤔 *Please confirm this expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n📝 *Notes:* ${exp.notes || 'None'}\n\nReply *yes* / *confirm* to log it, or *no* / *cancel* to discard. 🤖`;
+      return {
+        text: `🤔 *Please confirm this expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n📝 *Notes:* ${exp.notes || 'None'}`,
+        buttons: [
+          { id: 'confirm_yes', title: 'Confirm & Save' },
+          { id: 'confirm_no', title: 'Cancel' }
+        ]
+      };
     }
   }
 
@@ -1552,7 +1621,8 @@ app.post('/api/whatsapp/message', authenticateJWT, async (req: any, res) => {
     const phoneIdentifier = `simulator-${user.id}`;
     const traceId = `sim-msg-${Date.now()}`;
     console.log(`[${traceId}] Received message from simulator`);
-    const replyText = await handleIncomingMessageFlow(text, base64Image, user, phoneIdentifier, true, traceId);
+    const replyResult = await handleIncomingMessageFlow(text, base64Image, user, phoneIdentifier, true, traceId);
+    const replyText = typeof replyResult === 'string' ? replyResult : replyResult.text;
 
     await WhatsAppChatModel.create({
       id: `bot-msg-${Date.now()}`,
@@ -1602,11 +1672,19 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
       return;
     }
     const messageId = message.id;
-    const text = message.text?.body;
+    let text = message.text?.body;
     const type = message.type;
     let base64Image: string | undefined;
 
-    if (type !== 'text' && type !== 'image') {
+    if (type === 'interactive') {
+      const btnReply = message.interactive?.button_reply;
+      if (btnReply) {
+        text = btnReply.title; // Treat button reply title as message text
+        console.log(`[${traceId}] Interactive button click received: id=${btnReply.id}, title="${btnReply.title}"`);
+      }
+    }
+
+    if (type !== 'text' && type !== 'image' && type !== 'interactive') {
       console.log(`[${traceId}] Ignoring unsupported webhook message type: ${type}`);
       return;
     }
@@ -1668,17 +1746,24 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
 
     // Run unified message flow processor
     console.log(`[${traceId}] Processing message flow`);
-    const replyText = await handleIncomingMessageFlow(text, base64Image, user, cleanFrom, false, traceId);
+    const replyResult = await handleIncomingMessageFlow(text, base64Image, user, cleanFrom, false, traceId);
+
+    const logText = typeof replyResult === 'string' ? replyResult : replyResult.text;
 
     // Send reply via WhatsApp
-    console.log(`[${traceId}] Reply Sent. Sending reply to ${from}: "${replyText}"`);
-    await sendWhatsAppMessage(from, replyText);
+    if (typeof replyResult === 'object' && replyResult.buttons && replyResult.buttons.length > 0) {
+      console.log(`[${traceId}] Reply Sent. Sending interactive buttons reply to ${from}`);
+      await sendWhatsAppInteractiveButtons(from, replyResult.text, replyResult.buttons);
+    } else {
+      console.log(`[${traceId}] Reply Sent. Sending text reply to ${from}`);
+      await sendWhatsAppMessage(from, logText);
+    }
 
     // Log bot reply to simulator history
     await WhatsAppChatModel.create({
       id: `real-bot-msg-${Date.now()}`,
       sender: 'bot',
-      text: replyText,
+      text: logText,
       timestamp: new Date().toISOString()
     });
     console.log(`[${traceId}] Bot reply logged.`);
