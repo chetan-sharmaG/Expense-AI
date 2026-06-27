@@ -90,6 +90,14 @@ export default function App() {
     }
   }, [userToken]);
 
+  // Scroll to top of the main container when changing tabs
+  useEffect(() => {
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+    }
+  }, [activeTab]);
+
   // Auth Headers helper
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const headers = {
