@@ -130,7 +130,10 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = (confirmRequired = false) => {
+    if (confirmRequired && !window.confirm("Are you sure you want to log out of FamilyFunds?")) {
+      return;
+    }
     localStorage.removeItem('family_funds_token');
     localStorage.removeItem('family_funds_user');
     setUserToken(null);
@@ -742,7 +745,7 @@ export default function App() {
           <div className="text-xs text-slate-400 font-semibold border-t border-white/5 pt-2.5 flex items-center justify-between gap-1">
             <span className="truncate">Logged as: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
             <button 
-              onClick={handleLogout}
+              onClick={() => handleLogout(true)}
               className="text-rose-400 hover:text-rose-350 cursor-pointer flex items-center gap-0.5 bg-transparent border-0 outline-none p-1 rounded transition-colors"
               title="Logout Profile"
             >
@@ -805,7 +808,7 @@ export default function App() {
           </button>
           
           <button 
-            onClick={handleLogout}
+            onClick={() => handleLogout(true)}
             className="text-slate-450 hover:text-rose-455 p-1 flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none text-xs font-semibold transition-colors"
             title="Log Out"
           >
