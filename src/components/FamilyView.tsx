@@ -11,6 +11,7 @@ interface FamilyViewProps {
   state: DBState;
   onAddGroup: (name: string) => Promise<void>;
   onDeleteGroup: (id: string) => Promise<void>;
+  onUpdateGroupBudget: (id: string, budget: number) => Promise<void>;
   onAddUser: (user: { name: string; email: string; groupId: string; role: 'admin' | 'member'; whatsappNumber?: string }) => Promise<void>;
   onDeleteUser: (id: string) => Promise<void>;
   onUpdateUser: (id: string, updatedPayload: Partial<User>) => Promise<void>;
@@ -21,6 +22,7 @@ export default function FamilyView({
   state,
   onAddGroup,
   onDeleteGroup,
+  onUpdateGroupBudget,
   onAddUser,
   onDeleteUser,
   onUpdateUser,
@@ -46,6 +48,25 @@ export default function FamilyView({
 
   // Error/Success state helpers
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Editing group budget state
+  const [editingGroupBudget, setEditingGroupBudget] = useState<{ id: string; budget: string } | null>(null);
+
+  const handleSaveBudget = async (id: string) => {
+    if (!editingGroupBudget) return;
+    setErrorMsg('');
+    try {
+      const budgetNum = Number(editingGroupBudget.budget);
+      if (isNaN(budgetNum) || budgetNum < 0) {
+        setErrorMsg('Please enter a valid positive number for the budget limit.');
+        return;
+      }
+      await onUpdateGroupBudget(id, budgetNum);
+      setEditingGroupBudget(null);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update group budget.');
+    }
+  };
 
   // Handle Group creation
   const handleCreateGroup = async (e: React.FormEvent) => {
@@ -283,17 +304,29 @@ export default function FamilyView({
             {groups.map(grp => {
               const groupMembers = users.filter(u => u.groupId === grp.id);
 
+              // Calculate spending this month for this group
+              const currentMonthExpenses = state.expenses.filter(exp => {
+                if (exp.groupId !== grp.id) return false;
+                const now = new Date();
+                const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                return exp.date.startsWith(currentMonthPrefix);
+              });
+              const spentThisMonth = currentMonthExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+              const budgetPercentage = grp.monthlyBudget && grp.monthlyBudget > 0 
+                ? (spentThisMonth / grp.monthlyBudget) * 100 
+                : 0;
+
                return (
                 <div key={grp.id} className="bg-[#111420]/80 p-5 rounded-2xl border border-white/5 shadow-sm hover:border-emerald-500/20 transition flex flex-col justify-between space-y-4 backdrop-blur-md">
                   {/* Card head details */}
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-bold text-white text-base" id={`groups-name-${grp.id}`}>{grp.name}</h4>
-                      <span className="text-[10px] text-slate-500 font-semibold uppercase font-mono mt-0.5 block">Subgroup ID: {grp.id}</span>
+                      <span className="text-[10px] text-slate-550 font-semibold uppercase font-mono mt-0.5 block">Subgroup ID: {grp.id}</span>
                     </div>
                     {groups.length > 1 && (
                       <button 
-                        type="button"
+                        type="button" 
                         id={`btn-delete-group-${grp.id}`}
                         disabled={isSyncing}
                         onClick={() => {
@@ -301,7 +334,7 @@ export default function FamilyView({
                             onDeleteGroup(grp.id);
                           }
                         }}
-                        className="p-1.5 hover:bg-rose-950/30 text-slate-400 hover:text-rose-400 transition-colors rounded-md cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="p-1.5 hover:bg-rose-950/30 text-slate-450 hover:text-rose-400 transition-colors rounded-md cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                         title="Remove group allocation"
                       >
                         <Trash2 className="size-4" />
@@ -309,9 +342,82 @@ export default function FamilyView({
                     )}
                   </div>
 
+                  {/* Budget Tracker Section */}
+                  <div className="bg-[#090b11]/50 p-3.5 rounded-xl border border-white/5 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Monthly Budget limit</span>
+                      {editingGroupBudget?.id === grp.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            value={editingGroupBudget.budget}
+                            onChange={(e) => setEditingGroupBudget({ ...editingGroupBudget, budget: e.target.value })}
+                            className="w-20 px-1.5 py-0.5 text-xs bg-[#111420] border border-white/10 rounded text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                            placeholder="Limit"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveBudget(grp.id)}
+                            className="text-xs text-emerald-450 hover:text-emerald-400 font-bold px-1 cursor-pointer bg-transparent border-0"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingGroupBudget(null)}
+                            className="text-xs text-slate-400 hover:text-white px-1 cursor-pointer bg-transparent border-0"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingGroupBudget({ id: grp.id, budget: String(grp.monthlyBudget || 0) })}
+                          className="text-[10px] text-emerald-450 hover:text-emerald-400 font-bold flex items-center gap-1 cursor-pointer bg-transparent border-0"
+                        >
+                          <Pencil className="size-2.5" /> {grp.monthlyBudget ? 'Change' : 'Set limit'}
+                        </button>
+                      )}
+                    </div>
+
+                    {grp.monthlyBudget && grp.monthlyBudget > 0 ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-350">
+                            Spent: <b className="font-mono text-white">₹{spentThisMonth.toLocaleString('en-IN')}</b>
+                          </span>
+                          <span className="text-slate-400 font-mono font-semibold">
+                            of ₹{grp.monthlyBudget.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="w-full bg-[#111420] rounded-full h-1 border border-white/5 overflow-hidden">
+                          <div 
+                            className={`h-1 rounded-full transition-all duration-500 ${
+                              budgetPercentage > 100 
+                                ? 'bg-rose-500' 
+                                : budgetPercentage > 75 
+                                  ? 'bg-amber-500' 
+                                  : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[9px] text-slate-500 font-mono font-semibold">{Math.round(budgetPercentage)}% consumed</span>
+                          {budgetPercentage > 100 && (
+                            <span className="text-[9px] text-rose-400 font-bold animate-pulse">⚠️ Over Budget!</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-550 italic font-semibold">No spending limit configured.</p>
+                    )}
+                  </div>
+
                   {/* Group Members List */}
                   <div className="space-y-3">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Assigned Members ({groupMembers.length})</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-550 tracking-wider">Assigned Members ({groupMembers.length})</span>
                     {groupMembers.length === 0 ? (
                       <p className="text-slate-500 text-xs italic py-1">No family members assigned to this subgroup.</p>
                     ) : (

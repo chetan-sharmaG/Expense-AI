@@ -258,6 +258,81 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
           )}
         </div>
       </div>
+
+      {/* Group Budget Mapped Progress Meters */}
+      <div className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm space-y-4 backdrop-blur-md">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-semibold font-sans text-base">Monthly Budget Targets & Consumption</h3>
+            <p className="text-slate-500 text-xs font-semibold">Tracking active spending targets per family group</p>
+          </div>
+          <Activity className="size-5 text-emerald-450" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {groups.map(grp => {
+            const currentMonthExpenses = expenses.filter(exp => {
+              if (exp.groupId !== grp.id) return false;
+              const now = new Date();
+              const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+              return exp.date.startsWith(currentMonthPrefix);
+            });
+            const spentThisMonth = currentMonthExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+            const budgetPercentage = grp.monthlyBudget && grp.monthlyBudget > 0 
+              ? (spentThisMonth / grp.monthlyBudget) * 100 
+              : 0;
+
+            return (
+              <div key={grp.id} className="bg-[#090b11]/40 p-4 rounded-xl border border-white/5 space-y-3 hover:border-emerald-500/20 transition-all flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-slate-200">{grp.name.split(' (')[0]}</span>
+                  {grp.monthlyBudget && grp.monthlyBudget > 0 ? (
+                    <span className="text-xs bg-[#111420] border border-white/5 text-slate-350 px-2 py-0.5 rounded-md font-mono">
+                      Limit: ₹{grp.monthlyBudget.toLocaleString('en-IN')}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-550 italic font-semibold">No budget limit set</span>
+                  )}
+                </div>
+
+                {grp.monthlyBudget && grp.monthlyBudget > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400 font-semibold">
+                        Spent: <b className="font-mono text-white">₹{spentThisMonth.toLocaleString('en-IN')}</b>
+                      </span>
+                      <span className={`font-bold font-mono text-xs ${budgetPercentage > 100 ? 'text-rose-450' : budgetPercentage > 75 ? 'text-amber-500' : 'text-emerald-450'}`}>
+                        {Math.round(budgetPercentage)}%
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-[#111420] rounded-full h-1.5 border border-white/5 overflow-hidden">
+                      <div 
+                        className={`h-1.5 rounded-full transition-all duration-500 ${
+                          budgetPercentage > 100 
+                            ? 'bg-rose-500' 
+                            : budgetPercentage > 75 
+                              ? 'bg-amber-500' 
+                              : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
+                      />
+                    </div>
+
+                    {budgetPercentage > 100 && (
+                      <div className="text-[10px] text-rose-455 font-semibold flex items-center gap-1.5 animate-pulse bg-rose-955/20 border border-rose-900/30 p-1.5 rounded-lg">
+                        ⚠️ Limit Exceeded! Splurge warning active for this subgroup.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 italic py-1">Set monthly limit under "Family & Groups" settings menu to track progress.</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

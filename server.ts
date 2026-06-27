@@ -368,6 +368,22 @@ app.delete('/api/groups/:id', authenticateJWT, async (req: any, res) => {
   }
 });
 
+app.put('/api/groups/:id/budget', authenticateJWT, async (req: any, res) => {
+  const { id } = req.params;
+  const { monthlyBudget } = req.body;
+
+  try {
+    await GroupModel.updateOne({ id }, {
+      monthlyBudget: Number(monthlyBudget) || 0
+    });
+
+    const state = await getDBState(req.user.id);
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update group budget', message: err.message });
+  }
+});
+
 app.post('/api/users', authenticateJWT, async (req: any, res) => {
   const { name, email, groupId, role, whatsappNumber } = req.body;
   if (!name || !email || !groupId) {

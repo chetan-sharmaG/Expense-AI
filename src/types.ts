@@ -13,6 +13,7 @@ export interface Group {
   id: string;
   name: string;
   familyId: string;
+  monthlyBudget?: number;
 }
 
 export interface User {

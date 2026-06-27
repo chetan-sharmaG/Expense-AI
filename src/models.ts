@@ -12,6 +12,7 @@ export interface IGroup extends Document {
   id: string;
   name: string;
   familyId: string;
+  monthlyBudget?: number;
 }
 
 export interface IUser extends Document {
@@ -100,9 +101,10 @@ export const FamilyModel = getModel<IFamily>('Family', FamilySchema);
 
 // 2. Group Schema
 const GroupSchema = new Schema<IGroup>({
-  id:       { type: String, required: true, unique: true },
-  name:     { type: String, required: true },
-  familyId: { type: String, required: true }
+  id:            { type: String, required: true, unique: true },
+  name:          { type: String, required: true },
+  familyId:      { type: String, required: true },
+  monthlyBudget: { type: Number, default: 0 }
 });
 export const GroupModel = getModel<IGroup>('Group', GroupSchema);
 

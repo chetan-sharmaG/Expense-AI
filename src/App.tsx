@@ -258,6 +258,25 @@ export default function App() {
     }
   };
 
+  const handleUpdateGroupBudget = async (id: string, budget: number) => {
+    setIsSyncing(true);
+    try {
+      const res = await fetchWithAuth(`/api/groups/${id}/budget`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthlyBudget: budget })
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setDbState(body.state);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleDeleteGroup = async (id: string) => {
     setIsSyncing(true);
     try {
@@ -954,6 +973,7 @@ export default function App() {
                   state={dbState}
                   onAddGroup={handleAddGroup}
                   onDeleteGroup={handleDeleteGroup}
+                  onUpdateGroupBudget={handleUpdateGroupBudget}
                   onAddUser={handleAddUser}
                   onDeleteUser={handleDeleteUser}
                   onUpdateUser={handleUpdateUser}
