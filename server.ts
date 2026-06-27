@@ -311,6 +311,27 @@ app.post('/api/db-reset', async (req: any, res) => {
   }
 });
 
+// Reset expenses only (preserving users and groups)
+app.post('/api/db-clean-expenses', authenticateJWT, async (req: any, res) => {
+  try {
+    console.log('[Expenses Reset] Clearing expenses, settlements, and chats while keeping users/groups...');
+    await Promise.all([
+      ExpenseModel.deleteMany({}),
+      SettlementModel.deleteMany({}),
+      WhatsAppChatModel.deleteMany({}),
+      AdvisorChatModel.deleteMany({}),
+      WhatsAppSessionModel.deleteMany({})
+    ]);
+
+    const state = await getDBState(req.user.id);
+    console.log('[Expenses Reset] Expenses reset complete.');
+    res.json({ success: true, message: 'All expense records, settlements, and chat histories successfully reset.', state });
+  } catch (err: any) {
+    console.error('[Expenses Reset] Reset failed:', err);
+    res.status(500).json({ error: 'Failed to reset expenses', message: err.message });
+  }
+});
+
 // Family & Group Management
 app.post('/api/groups', authenticateJWT, async (req: any, res) => {
   const { name } = req.body;
@@ -875,6 +896,8 @@ async function runOcrOnReceipt(base64Image: string): Promise<{ amount: number; m
           You are an expert financial receipt reader. Please parse this payment screenshot (e.g., GPay, PhonePe, Paytm, BHIM, or static physical bill/receipt) and extract critical data.
           Analyze text, merchant details, payment confirmation, bank accounts numbers or reference IDs, and transaction amount very carefully.
           
+          Check if there is any message, note, remark, payment reason, or custom message written on the payment screenshot (for example: "for coffee", "lent", "rent share") and extract it in the "notes" field if present.
+          
           Look for payment confirmation status. Try to guess the appropriate category from standard options:
           - Food
           - Groceries
@@ -1403,8 +1426,12 @@ async function handleIncomingMessageFlow(
       return `⚠️ *Possible Duplicate Detected!* \n\nIt looks like an expense of *₹${exp.amount}* at *${exp.merchant}* was already logged in the last 10 minutes.\n\nDo you want to log it again anyway? Reply *confirm* / *yes* to save, or *cancel* to skip.`;
     }
 
-    // Auto-save if confidence is high (confidence >= 90) and no duplicate
-    if (parsedResult.confidence >= 90) {
+    const hasImage = !!base64Image;
+    const hasNote = exp.notes && exp.notes.trim() !== '';
+    const shouldAutoLog = parsedResult.confidence >= 90 && (!hasImage || hasNote);
+
+    // Auto-save if confidence is high (confidence >= 90) and no duplicate and we don't need to ask for notes
+    if (shouldAutoLog) {
       const newExpense = await ExpenseModel.create({
         id: `exp-${Date.now()}`,
         amount: Number(exp.amount),
@@ -1448,6 +1475,12 @@ async function handleIncomingMessageFlow(
 
       if (traceId) console.log(`[${traceId}] Session saved for manual confirmation (confidence ${parsedResult.confidence}%)`);
       const payer = user.id === paidBy ? user : (await UserModel.findOne({ id: paidBy })) || user;
+
+      // If it is a screenshot and no note was found, ask the user if they want to add a note
+      if (hasImage && !hasNote) {
+        return `🤔 *I detected a screenshot expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n\n*No note was found in the screenshot.* Do you want to add any notes before logging this? Reply with your note text, or reply *no* / *confirm* to save without notes. 🤖`;
+      }
+
       return `🤔 *Please confirm this expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n📝 *Notes:* ${exp.notes || 'None'}\n\nReply *yes* / *confirm* to log it, or *no* / *cancel* to discard. 🤖`;
     }
   }

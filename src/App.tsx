@@ -26,7 +26,8 @@ import {
   LogOut,
   Filter,
   BrainCircuit,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react';
 
 export default function App() {
@@ -195,6 +196,26 @@ export default function App() {
       if (res.ok) {
         const body = await res.json();
         setDbState(body.data);
+        setActiveTab('dashboard');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Reset only expenses and settlements
+  const handleResetExpensesOnly = async () => {
+    if (!confirm('Are you sure you wish to delete all expenses, settlements, and chat histories? Users and Groups will be preserved. This is irreversible.')) {
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const res = await fetchWithAuth('/api/db-clean-expenses', { method: 'POST' });
+      if (res.ok) {
+        const body = await res.json();
+        setDbState(body.state);
         setActiveTab('dashboard');
       }
     } catch (e) {
@@ -700,10 +721,20 @@ export default function App() {
             type="button"
             id="btn-factory-reset"
             onClick={handleResetSystem}
-            className="w-full py-2 bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 text-[10px] font-bold cursor-pointer"
+            className="w-full py-2 bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 text-[10px] font-bold cursor-pointer mb-2"
           >
             <RotateCcw className="size-3 inline mr-1" />
             Reset Family Default
+          </button>
+
+          <button
+            type="button"
+            id="btn-reset-expenses"
+            onClick={handleResetExpensesOnly}
+            className="w-full py-2 bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 text-[10px] font-bold cursor-pointer"
+          >
+            <RotateCcw className="size-3 inline mr-1" />
+            Reset Expenses Only
           </button>
         </div>
       </aside>
@@ -721,6 +752,14 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={fetchState}
+            disabled={isSyncing}
+            className={`p-1.5 bg-white/5 hover:bg-white/10 text-slate-355 hover:text-white rounded-lg border border-white/5 transition-all flex items-center justify-center cursor-pointer ${isSyncing ? 'animate-spin opacity-50' : ''}`}
+            title="Refresh"
+          >
+            <RefreshCw className="size-3.5" />
+          </button>
           <button
             onClick={() => {
               setActiveTab('expenses');
@@ -778,19 +817,34 @@ export default function App() {
             })}
           </div>
 
-          <div className="pt-2 border-t border-white/5 flex justify-between gap-1.5 items-center">
-            <button
-              type="button"
-              id="btn-mobile-reset"
-              onClick={() => {
-                handleResetSystem();
-                setMobileMenuOpen(false);
-              }}
-              className="text-[10px] text-rose-400 hover:underline cursor-pointer font-bold"
-            >
-              Reset Database default
-            </button>
-            <span className="text-[10px] text-slate-400 font-semibold truncate">User: {currentUser?.name}</span>
+          <div className="pt-2 border-t border-white/5 space-y-2">
+            <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold font-mono">
+              <span>User: {currentUser?.name}</span>
+            </div>
+            <div className="flex justify-between items-center gap-2 pt-1 border-t border-white/5">
+              <button
+                type="button"
+                id="btn-mobile-reset"
+                onClick={() => {
+                  handleResetSystem();
+                  setMobileMenuOpen(false);
+                }}
+                className="text-[10px] text-rose-400 hover:underline cursor-pointer font-bold bg-transparent border-0 p-0"
+              >
+                Reset Database default
+              </button>
+              <button
+                type="button"
+                id="btn-mobile-reset-expenses"
+                onClick={() => {
+                  handleResetExpensesOnly();
+                  setMobileMenuOpen(false);
+                }}
+                className="text-[10px] text-rose-400 hover:underline cursor-pointer font-bold bg-transparent border-0 p-0"
+              >
+                Reset Expenses Only
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -806,6 +860,14 @@ export default function App() {
             <p className="text-xs text-slate-500 font-medium">Manage and review your family ledger operations</p>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={fetchState}
+              disabled={isSyncing}
+              className={`p-2 bg-white/5 hover:bg-white/10 text-slate-350 hover:text-white rounded-xl border border-white/5 transition-all flex items-center justify-center cursor-pointer ${isSyncing ? 'animate-spin opacity-50' : ''}`}
+              title="Refresh database data"
+            >
+              <RefreshCw className="size-4" />
+            </button>
             <button
               onClick={() => {
                 setActiveTab('expenses');
