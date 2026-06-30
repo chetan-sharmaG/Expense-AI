@@ -43,19 +43,80 @@ export default function SettlementView({
   const [registeringProposal, setRegisteringProposal] = useState<ProposedSettlement | null>(null);
   const [notesInput, setNotesInput] = useState('');
 
-  // Calculate balancing rules
+  // Selected Billing Period (YYYY-MM)
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  // Calculate unique months available for dropdown options
+  const monthOptions = useMemo(() => {
+    const monthsSet = new Set<string>();
+    
+    // Always include current month
+    const now = new Date();
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    monthsSet.add(currentMonthStr);
+    
+    // Extract from expenses
+    expenses.forEach(exp => {
+      if (exp.date && exp.date.length >= 7) {
+        monthsSet.add(exp.date.slice(0, 7));
+      }
+    });
+
+    // Extract from settlements
+    settlements.forEach(s => {
+      if (s.billingMonth) {
+        monthsSet.add(s.billingMonth);
+      } else if (s.date && s.date.length >= 7) {
+        monthsSet.add(s.date.slice(0, 7));
+      }
+    });
+
+    return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+  }, [expenses, settlements]);
+
+  // Format month YYYY-MM label to friendly string (e.g. "June 2026")
+  const formatMonthLabel = (ym: string) => {
+    const [year, month] = ym.split('-');
+    const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+
+  // Filter expenses matching the active selected billing period
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(exp => exp.date && exp.date.startsWith(selectedMonth));
+  }, [expenses, selectedMonth]);
+
+  // Calculate balancing rules for the selected billing month
   const { summaries, totalFamilySpend, proposals } = useMemo(() => {
-    return calculateGroupSettlements(expenses, groups, splitMethod, users);
-  }, [expenses, groups, splitMethod, users]);
+    return calculateGroupSettlements(filteredExpenses, groups, splitMethod, users);
+  }, [filteredExpenses, groups, splitMethod, users]);
 
-  // Splitting settlements into Active (Pending) and History (Settled)
-  const pendingSettlements = useMemo(() => {
-    return settlements.filter(s => s.status === 'pending');
-  }, [settlements]);
+  // Current Month's Pending Settlements
+  const currentMonthPending = useMemo(() => {
+    return settlements.filter(s => {
+      const m = s.billingMonth || (s.date ? s.date.slice(0, 7) : '');
+      return m === selectedMonth && s.status === 'pending';
+    });
+  }, [settlements, selectedMonth]);
 
-  const settledHistory = useMemo(() => {
-    return settlements.filter(s => s.status === 'settled');
-  }, [settlements]);
+  // Unpaid Dues from Previous Months
+  const previousMonthsPending = useMemo(() => {
+    return settlements.filter(s => {
+      const m = s.billingMonth || (s.date ? s.date.slice(0, 7) : '');
+      return m !== selectedMonth && s.status === 'pending';
+    });
+  }, [settlements, selectedMonth]);
+
+  // Current Month's Settled History
+  const currentMonthSettledHistory = useMemo(() => {
+    return settlements.filter(s => {
+      const m = s.billingMonth || (s.date ? s.date.slice(0, 7) : '');
+      return m === selectedMonth && s.status === 'settled';
+    });
+  }, [settlements, selectedMonth]);
 
   // Handle register a proposal to DB
   const handleOpenRegister = (prop: ProposedSettlement) => {
@@ -70,7 +131,8 @@ export default function SettlementView({
       fromGroup: registeringProposal.fromGroupId,
       toGroup: registeringProposal.toGroupId,
       amount: registeringProposal.amount,
-      notes: notesInput
+      notes: notesInput,
+      billingMonth: selectedMonth
     });
 
     setRegisteringProposal(null);
@@ -81,14 +143,32 @@ export default function SettlementView({
     <div className="space-y-6">
       
       {/* Settings Row */}
-      <div className="bg-[#111420]/80 p-5 rounded-2xl shadow-sm border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 backdrop-blur-md">
+      <div className="bg-[#111420]/80 p-5 rounded-2xl shadow-sm border border-white/5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 backdrop-blur-md">
         <div>
           <h2 className="text-white font-bold font-sans text-lg">Group Settlement Engine</h2>
           <p className="text-slate-400 text-xs mt-0.5 font-semibold">Calculate fair fractional splits and balance liabilities between sub-family units.</p>
         </div>
 
-        {/* Toggle algorithm buttons */}
-        <div className="bg-[#090b11]/80 border border-white/5 p-1 rounded-xl flex items-center gap-1">
+        {/* Dropdown and toggles */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Billing Period Selector */}
+          <div className="flex items-center gap-2 bg-[#090b11]/80 border border-white/5 px-3 py-2 rounded-xl shrink-0">
+            <span className="text-[10px] text-slate-500 font-extrabold uppercase font-mono tracking-wider">Billing Month:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent border-0 text-slate-200 text-xs font-bold focus:outline-none cursor-pointer pr-1"
+            >
+              {monthOptions.map(ym => (
+                <option key={ym} value={ym} className="bg-[#0f121d] text-white">
+                  {formatMonthLabel(ym)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Toggle algorithm buttons */}
+          <div className="bg-[#090b11]/80 border border-white/5 p-1 rounded-xl flex items-center gap-1 shrink-0">
           <button
             type="button"
             id="btn-split-equal"
@@ -115,6 +195,7 @@ export default function SettlementView({
           </button>
         </div>
       </div>
+    </div>
 
       {/* Main calculation breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -380,60 +461,116 @@ export default function SettlementView({
         <div className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm space-y-4 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <Clock className="size-5 text-amber-500" />
-            <h3 className="text-white font-semibold font-sans text-base">Unsettled / Pending Settlements</h3>
+            <h3 className="text-white font-semibold font-sans text-base">Pending Settlements & Unpaid Dues</h3>
           </div>
 
-          <div className="divide-y divide-white/5 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-            {pendingSettlements.length === 0 ? (
-              <p className="text-slate-500 text-center py-12 text-xs font-semibold">No pending transactions registered.</p>
-            ) : (
-              pendingSettlements.map((set) => {
-                const fromG = groups.find(g => g.id === set.fromGroup);
-                const toG = groups.find(g => g.id === set.toGroup);
+          <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+            
+            {/* Section A: Current Selected Month Pending */}
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-2">
+                Active Billing Month ({formatMonthLabel(selectedMonth)})
+              </span>
+              <div className="divide-y divide-white/5 bg-[#090b11]/30 rounded-xl border border-white/5 px-3 py-1">
+                {currentMonthPending.length === 0 ? (
+                  <p className="text-slate-550 text-center py-6 text-xs font-semibold italic">No pending transactions registered for this month.</p>
+                ) : (
+                  currentMonthPending.map((set) => {
+                    const fromG = groups.find(g => g.id === set.fromGroup);
+                    const toG = groups.find(g => g.id === set.toGroup);
 
-                return (
-                  <div key={set.id} className="py-3 flex items-center justify-between gap-4">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-200">
-                        {fromG ? fromG.name.split(' (')[0] : 'Unknown'} ➔ {toG ? toG.name.split(' (')[0] : 'Unknown'}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 font-bold mt-0.5">{set.notes || 'Group balancing settle'}</p>
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 text-[8px] bg-amber-950/20 text-amber-500 font-bold uppercase rounded border border-amber-900/30 mt-1">
-                        Pending payment
-                      </span>
-                    </div>
+                    return (
+                      <div key={set.id} className="py-3 flex items-center justify-between gap-4">
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-200">
+                            {fromG ? fromG.name.split(' (')[0] : 'Unknown'} ➔ {toG ? toG.name.split(' (')[0] : 'Unknown'}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 font-bold mt-0.5">{set.notes || 'Group balancing settle'}</p>
+                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 text-[8px] bg-amber-950/20 text-amber-500 font-bold uppercase rounded border border-amber-900/30 mt-1">
+                            Pending payment
+                          </span>
+                        </div>
 
-                    <div className="text-right shrink-0 flex items-center gap-3">
-                      <div className="font-mono font-bold text-white text-sm">₹{set.amount.toLocaleString('en-IN')}</div>
-                      <button
-                        type="button"
-                        id={`btn-settle-${set.id}`}
-                        disabled={isSyncing}
-                        onClick={() => onMarkSettleCompleted(set.id)}
-                        className="px-2.5 py-1 bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-400 border border-emerald-900/30 rounded-lg text-[10px] font-bold cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Settle Paid
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+                        <div className="text-right shrink-0 flex items-center gap-3">
+                          <div className="font-mono font-bold text-white text-sm">₹{set.amount.toLocaleString('en-IN')}</div>
+                          <button
+                            type="button"
+                            id={`btn-settle-${set.id}`}
+                            disabled={isSyncing}
+                            onClick={() => onMarkSettleCompleted(set.id)}
+                            className="px-2.5 py-1 bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-450 border border-emerald-900/30 rounded-lg text-[10px] font-bold cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Settle Paid
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Section B: Unpaid Dues from Previous Months */}
+            <div>
+              <span className="text-[10px] uppercase font-bold text-rose-450 tracking-wider block mb-2 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block animate-pulse"></span>
+                Unpaid Dues from Previous Months
+              </span>
+              <div className="divide-y divide-white/5 bg-[#090b11]/30 rounded-xl border border-white/5 px-3 py-1">
+                {previousMonthsPending.length === 0 ? (
+                  <p className="text-slate-550 text-center py-6 text-xs font-semibold italic">All previous month accounts cleared! Good job. 🌟</p>
+                ) : (
+                  previousMonthsPending.map((set) => {
+                    const fromG = groups.find(g => g.id === set.fromGroup);
+                    const toG = groups.find(g => g.id === set.toGroup);
+                    const getMonthLabel = (s: typeof set) => s.billingMonth ? formatMonthLabel(s.billingMonth) : (s.date ? formatMonthLabel(s.date.slice(0, 7)) : 'Past');
+
+                    return (
+                      <div key={set.id} className="py-3 flex items-center justify-between gap-4">
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-200">
+                            {fromG ? fromG.name.split(' (')[0] : 'Unknown'} ➔ {toG ? toG.name.split(' (')[0] : 'Unknown'}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 font-bold mt-0.5">{set.notes || 'Group balancing settle'}</p>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[8px] bg-rose-955/20 text-rose-400 font-bold uppercase rounded border border-rose-900/30 mt-1 font-mono">
+                            Due from {getMonthLabel(set)}
+                          </span>
+                        </div>
+
+                        <div className="text-right shrink-0 flex items-center gap-3">
+                          <div className="font-mono font-bold text-rose-400 text-sm">₹{set.amount.toLocaleString('en-IN')}</div>
+                          <button
+                            type="button"
+                            id={`btn-settle-prev-${set.id}`}
+                            disabled={isSyncing}
+                            onClick={() => onMarkSettleCompleted(set.id)}
+                            className="px-2.5 py-1 bg-rose-955/25 hover:bg-rose-955/40 text-rose-400 border border-rose-900/30 rounded-lg text-[10px] font-bold cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Settle Paid
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
 
         {/* Settled History */}
         <div className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm space-y-4 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <History className="size-5 text-emerald-500" />
+            <History className="size-5 text-emerald-505" />
             <h3 className="text-white font-semibold font-sans text-base">Completed Settlement Archive</h3>
           </div>
 
-          <div className="divide-y divide-white/5 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-            {settledHistory.length === 0 ? (
-              <p className="text-slate-500 text-center py-12 text-xs font-semibold">No transaction history in ledger logs.</p>
+          <div className="divide-y divide-white/5 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+            {currentMonthSettledHistory.length === 0 ? (
+              <p className="text-slate-500 text-center py-12 text-xs font-semibold">No transaction history in ledger logs for this month.</p>
             ) : (
-              settledHistory.map((set) => {
+              currentMonthSettledHistory.map((set) => {
                 const fromG = groups.find(g => g.id === set.fromGroup);
                 const toG = groups.find(g => g.id === set.toGroup);
 
@@ -443,8 +580,8 @@ export default function SettlementView({
                       <h4 className="text-xs font-semibold text-slate-300">
                         {fromG ? fromG.name.split(' (')[0] : 'Unknown'} ➔ {toG ? toG.name.split(' (')[0] : 'Unknown'}
                       </h4>
-                      <p className="text-[10px] text-slate-500 mt-0.5 font-bold">{set.notes || 'Cleared'}</p>
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 text-[8px] bg-emerald-950/20 text-emerald-400 font-bold uppercase rounded border border-emerald-900/30 mt-1">
+                      <p className="text-[10px] text-slate-550 mt-0.5 font-semibold">{set.notes || 'Cleared'}</p>
+                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 text-[8px] bg-emerald-950/20 text-emerald-450 font-bold uppercase rounded border border-emerald-900/30 mt-1">
                         Settled OK
                       </span>
                     </div>

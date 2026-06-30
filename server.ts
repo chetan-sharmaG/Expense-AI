@@ -2021,12 +2021,13 @@ app.post('/api/ai/advisor/clear', authenticateJWT, async (req: any, res) => {
 
 // Settlements CRUD
 app.post('/api/settlements', authenticateJWT, async (req: any, res) => {
-  const { fromGroup, toGroup, amount, notes } = req.body;
+  const { fromGroup, toGroup, amount, notes, billingMonth } = req.body;
   if (!fromGroup || !toGroup || !amount) {
     return res.status(400).json({ error: 'Missing settlement fields' });
   }
 
   try {
+    const currentMonthStr = new Date().toISOString().slice(0, 7); // Default to current month: YYYY-MM
     const newSettlement = await SettlementModel.create({
       id: `set-${Date.now()}`,
       fromGroup,
@@ -2034,7 +2035,8 @@ app.post('/api/settlements', authenticateJWT, async (req: any, res) => {
       amount: Number(amount),
       status: 'pending',
       date: new Date().toISOString().split('T')[0],
-      notes: notes || 'Settlement calculated by settlement engine'
+      notes: notes || 'Settlement calculated by settlement engine',
+      billingMonth: billingMonth || currentMonthStr
     });
 
     const state = await getDBState(req.user.id);

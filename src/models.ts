@@ -63,6 +63,7 @@ export interface ISettlement extends Document {
   date: string;
   notes?: string;
   settledAt?: string;
+  billingMonth?: string;
 }
 
 export interface IWhatsAppChat extends Document {
@@ -137,14 +138,15 @@ export const ExpenseModel = getModel<IExpense>('Expense', ExpenseSchema);
 
 // 5. Settlement Schema
 const SettlementSchema = new Schema<ISettlement>({
-  id:        { type: String, required: true, unique: true },
-  fromGroup: { type: String, required: true },
-  toGroup:   { type: String, required: true },
-  amount:    { type: Number, required: true },
-  status:    { type: String, enum: ['pending', 'settled'], default: 'pending' },
-  date:      { type: String, required: true },
-  notes:     { type: String },
-  settledAt: { type: String }
+  id:           { type: String, required: true, unique: true },
+  fromGroup:    { type: String, required: true },
+  toGroup:      { type: String, required: true },
+  amount:       { type: Number, required: true },
+  status:       { type: String, enum: ['pending', 'settled'], default: 'pending' },
+  date:         { type: String, required: true },
+  notes:        { type: String },
+  settledAt:    { type: String },
+  billingMonth: { type: String }
 });
 export const SettlementModel = getModel<ISettlement>('Settlement', SettlementSchema);
 

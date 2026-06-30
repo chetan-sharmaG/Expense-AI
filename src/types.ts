@@ -47,6 +47,7 @@ export interface Settlement {
   date: string;
   notes?: string;
   settledAt?: string;
+  billingMonth?: string;
 }
 
 export interface AdvisorMessage {
