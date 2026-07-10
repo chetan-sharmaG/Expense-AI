@@ -72,6 +72,60 @@ export default function ExpensesView({
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // Selected Month Billing Period Filter
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  // Calculate unique months available for dropdown options
+  const monthOptions = useMemo(() => {
+    const monthsSet = new Set<string>();
+    expenses.forEach(exp => {
+      if (exp.date && exp.date.length >= 7) {
+        monthsSet.add(exp.date.slice(0, 7));
+      }
+    });
+    // Ensure current month is represented
+    const now = new Date();
+    monthsSet.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+  }, [expenses]);
+
+  // Format month YYYY-MM label to friendly string (e.g. "June 2026")
+  const formatMonthLabel = (ym: string) => {
+    const [year, month] = ym.split('-');
+    const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+
+  // Format logged at time nicely (e.g., "30 Jun, 11:12 AM")
+  const formatLoggedTime = (isoString?: string) => {
+    if (!isoString) return '';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      return '';
+    }
+  };
+
+  // Scroll to top when this component is rendered/mounted
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+    }
+  }, []);
+
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -237,9 +291,12 @@ export default function ExpensesView({
       const matchesFrom = !dateFrom || exp.date >= dateFrom;
       const matchesTo = !dateTo || exp.date <= dateTo;
 
-      return matchesSearch && matchesCategory && matchesUser && matchesGroup && matchesFrom && matchesTo;
+      // 6. Billing Month filter
+      const matchesMonth = selectedMonth === 'overall' || (exp.date && exp.date.startsWith(selectedMonth));
+
+      return matchesSearch && matchesCategory && matchesUser && matchesGroup && matchesFrom && matchesTo && matchesMonth;
     }).sort((a, b) => b.date.localeCompare(a.date)); // Sort newest date first
-  }, [expenses, searchTerm, selectedCategory, selectedPaidBy, selectedGroup, dateFrom, dateTo]);
+  }, [expenses, searchTerm, selectedCategory, selectedPaidBy, selectedGroup, dateFrom, dateTo, selectedMonth]);
 
   // Clear all filters helper
   const clearFilters = () => {
@@ -249,6 +306,8 @@ export default function ExpensesView({
     setSelectedGroup('');
     setDateFrom('');
     setDateTo('');
+    const now = new Date();
+    setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
   };
 
   return (
@@ -288,7 +347,7 @@ export default function ExpensesView({
         {/* Collapsible Filter panel wrapper */}
         <div className={`${showFiltersMobile ? 'block' : 'hidden'} md:block space-y-4`}>
           {/* Filters Panel */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 pt-2">
             {/* Search text input */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
@@ -310,7 +369,7 @@ export default function ExpensesView({
                 id="filter-category"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-[#090b11]/80 border border-white/5 rounded-lg focus:outline-none focus:border-emerald-500 font-medium text-slate-350"
+                className="w-full px-3 py-2 text-sm bg-[#090b11]/80 border border-white/5 rounded-lg focus:outline-none focus:border-emerald-500 font-medium text-slate-355"
               >
                 <option value="">Categories (All)</option>
                 {CATEGORIES.map(cat => (
@@ -325,7 +384,7 @@ export default function ExpensesView({
                 id="filter-paid-by"
                 value={selectedPaidBy}
                 onChange={(e) => setSelectedPaidBy(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-[#090b11]/80 border border-white/5 rounded-lg focus:outline-none focus:border-emerald-500 font-medium text-slate-350"
+                className="w-full px-3 py-2 text-sm bg-[#090b11]/80 border border-white/5 rounded-lg focus:outline-none focus:border-emerald-500 font-medium text-slate-355"
               >
                 <option value="">Spender member (All)</option>
                 {users.map(u => (
@@ -345,6 +404,21 @@ export default function ExpensesView({
                 <option value="">Sub-Group (All)</option>
                 {groups.map(g => (
                   <option key={g.id} value={g.id}>{g.name.split(' (')[0]}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Month Filter */}
+            <div>
+              <select
+                id="filter-month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-[#090b11]/80 border border-white/5 rounded-lg focus:outline-none focus:border-emerald-500 font-medium text-slate-355 text-ellipsis"
+              >
+                <option value="overall">All Months (Overall)</option>
+                {monthOptions.map(ym => (
+                  <option key={ym} value={ym}>{formatMonthLabel(ym)}</option>
                 ))}
               </select>
             </div>
@@ -488,7 +562,12 @@ export default function ExpensesView({
 
                         {/* Date */}
                         <td className="py-4 px-4 text-xs font-medium text-slate-400 font-mono">
-                          {expense.date}
+                          <div>{expense.date}</div>
+                          {expense.createdAt && (
+                            <div className="text-[10px] text-slate-550 font-sans mt-0.5" title="Server logged timestamp">
+                              Logged: {formatLoggedTime(expense.createdAt)}
+                            </div>
+                          )}
                         </td>
 
                         {/* Total cost */}
@@ -565,7 +644,14 @@ export default function ExpensesView({
                         )}
                         <div className="min-w-0">
                           <h4 className="font-semibold text-slate-100 truncate text-sm" id={`mob-merchant-${expense.id}`}>{expense.merchant}</h4>
-                          <p className="text-xs text-slate-500 font-mono mt-0.5">{expense.date}</p>
+                          <p className="text-xs text-slate-500 font-mono mt-0.5">
+                            {expense.date}
+                            {expense.createdAt && (
+                              <span className="text-[10px] text-slate-550 font-sans block mt-0.5">
+                                Logged: {formatLoggedTime(expense.createdAt)}
+                              </span>
+                            )}
+                          </p>
                         </div>
                       </div>
                       <div className="text-right shrink-0">
