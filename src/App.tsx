@@ -929,7 +929,7 @@ export default function App() {
               element={
                 <DashboardView 
                   state={dbState} 
-                  onNavigate={(id) => navigate(`/${id}`)} 
+                  onNavigate={(id, stateData) => navigate(`/${id}`, { state: stateData })} 
                 />
               } 
             />

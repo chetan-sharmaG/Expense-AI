@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { DBState, Expense, User } from '../types';
 import { 
   Search, 
@@ -72,11 +73,23 @@ export default function ExpensesView({
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  const location = useLocation();
+
   // Selected Month Billing Period Filter
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    if (location.state?.initialMonth) {
+      return location.state.initialMonth;
+    }
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Keep filter in sync if location state changes
+  useEffect(() => {
+    if (location.state?.initialMonth) {
+      setSelectedMonth(location.state.initialMonth);
+    }
+  }, [location.state?.initialMonth]);
 
   // Calculate unique months available for dropdown options
   const monthOptions = useMemo(() => {

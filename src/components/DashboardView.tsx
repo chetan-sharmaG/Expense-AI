@@ -17,7 +17,7 @@ import {
 
 interface DashboardViewProps {
   state: DBState;
-  onNavigate: (tab: string) => void;
+  onNavigate: (tab: string, stateData?: any) => void;
 }
 
 export default function DashboardView({ state, onNavigate }: DashboardViewProps) {
@@ -273,7 +273,7 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
             <button 
               type="button"
               id="btn-navigate-expenses"
-              onClick={() => onNavigate('expenses')} 
+              onClick={() => onNavigate('expenses', { initialMonth: selectedMonthFilter })} 
               className="text-xs text-emerald-450 hover:text-emerald-400 font-bold inline-flex items-center gap-1 cursor-pointer"
             >
               View entire logs ledger <ArrowUpRight className="size-3" />
