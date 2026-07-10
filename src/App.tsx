@@ -29,7 +29,9 @@ import {
   Filter,
   BrainCircuit,
   Plus,
-  RefreshCw
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 export default function App() {
@@ -41,6 +43,9 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [triggerAddExpense, setTriggerAddExpense] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebar_collapsed') === 'true';
+  });
 
   // Authentication states
   const [userToken, setUserToken] = useState<string | null>(() => localStorage.getItem('family_funds_token'));
@@ -686,28 +691,46 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col lg:flex-row">
-      
       {/* 1. SIDEBAR Navigation rail (Desktop) */}
-      <aside className="w-full lg:w-72 bg-[#0d101d] text-slate-100 flex-col justify-between shrink-0 border-r border-white/5 hidden lg:flex">
-        <div className="p-6 space-y-8">
+      <aside className={`bg-[#0d101d] text-slate-100 flex-col justify-between shrink-0 border-r border-white/5 hidden lg:flex transition-all duration-300 ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'}`}>
+        <div className={`p-6 space-y-8 ${sidebarCollapsed ? 'px-3' : ''}`}>
           
           {/* Brand header */}
-          <div 
-            onClick={() => navigate('/dashboard')} 
-            className="flex items-center gap-3 cursor-pointer hover:opacity-90 transition-opacity"
-          >
-            <div className="w-9 h-9 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white shadow-lg flex items-center justify-center font-bold font-mono">
-              F
+          <div className={`flex items-center gap-3 justify-between ${sidebarCollapsed ? 'flex-col items-center' : ''}`}>
+            <div 
+              onClick={() => navigate('/dashboard')} 
+              className="flex items-center gap-3 cursor-pointer hover:opacity-90 transition-opacity"
+            >
+              <div className="w-9 h-9 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white shadow-lg flex items-center justify-center font-bold font-mono shrink-0">
+                F
+              </div>
+              {!sidebarCollapsed && (
+                <div className="transition-opacity duration-200">
+                  <h2 className="font-bold text-lg tracking-tight text-white font-sans">FamilyFunds</h2>
+                  <span className="text-[9px] text-slate-500 font-extrabold tracking-widest uppercase font-mono mt-0.5 block">Sharma family ledger</span>
+                </div>
+              )}
             </div>
-            <div>
-              <h2 className="font-bold text-lg tracking-tight text-white font-sans">FamilyFunds</h2>
-              <span className="text-[9px] text-slate-500 font-extrabold tracking-widest uppercase font-mono mt-0.5">Sharma family ledger</span>
-            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const next = !sidebarCollapsed;
+                setSidebarCollapsed(next);
+                localStorage.setItem('sidebar_collapsed', String(next));
+              }}
+              className={`p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 hover:border-emerald-500/25 text-slate-400 hover:text-white transition cursor-pointer flex items-center justify-center shrink-0 ${sidebarCollapsed ? 'mt-2 mx-auto' : 'ml-auto'}`}
+              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              {sidebarCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+            </button>
           </div>
 
           {/* Navigation links */}
           <nav className="space-y-1.5 pt-4">
-            <div className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono mb-2">Main Menu</div>
+            {!sidebarCollapsed && (
+              <div className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono mb-2">Main Menu</div>
+            )}
             {navItems.map(item => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -718,13 +741,16 @@ export default function App() {
                   id={`side-nav-${item.id}`}
                   onClick={() => navigate('/' + item.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium tracking-wide transition-all cursor-pointer ${
+                    sidebarCollapsed ? 'justify-center px-0' : ''
+                  } ${
                     isActive 
                       ? 'bg-emerald-950/30 text-emerald-450 border-l-2 border-emerald-500 font-bold shadow-inner' 
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
+                  title={sidebarCollapsed ? item.name : undefined}
                 >
                   <Icon className="size-4.5 shrink-0" />
-                  {item.name}
+                  {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
                 </button>
               );
             })}
@@ -732,50 +758,61 @@ export default function App() {
         </div>
 
         {/* Sync panel on footer */}
-        <div className="p-6 border-t border-white/5 space-y-3.5 bg-[#090b11]/80">
-          <div className="flex items-center justify-between text-[10px] text-slate-550 font-mono font-bold">
-            <span className="flex items-center gap-1.5">
+        <div className={`p-4 border-t border-white/5 space-y-3.5 bg-[#090b11]/80 transition-all ${sidebarCollapsed ? 'flex flex-col items-center px-2' : ''}`}>
+          <div className={`flex items-center justify-between text-[10px] text-slate-550 font-mono font-bold w-full ${sidebarCollapsed ? 'justify-center' : ''}`}>
+            <span className="flex items-center gap-1.5" title={sidebarCollapsed ? (isSyncing ? 'Syncing...' : 'MongoDB Connected') : undefined}>
               <CircleDot className={`size-2.5 ${isSyncing ? 'text-amber-500 animate-ping' : 'text-emerald-505'}`} />
-              {isSyncing ? 'Syncing...' : 'MongoDB Connected'}
+              {!sidebarCollapsed && (isSyncing ? 'Syncing...' : 'MongoDB Connected')}
             </span>
-            <span className="text-slate-600">V3.5</span>
+            {!sidebarCollapsed && <span className="text-slate-600">V3.5</span>}
           </div>
 
           {/* Active member session info & logout */}
-          <div className="text-xs text-slate-400 font-semibold border-t border-white/5 pt-2.5 flex items-center justify-between gap-1">
-            <span className="truncate">Logged as: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
+          <div className={`text-xs text-slate-400 font-semibold border-t border-white/5 pt-2.5 flex items-center justify-between gap-1 w-full ${sidebarCollapsed ? 'justify-center border-t-0 pt-0' : ''}`}>
+            {!sidebarCollapsed && (
+              <span className="truncate">Logged as: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
+            )}
             <button 
               onClick={() => handleLogout(true)}
-              className="text-rose-400 hover:text-rose-350 cursor-pointer flex items-center gap-0.5 bg-transparent border-0 outline-none p-1 rounded transition-colors"
+              className={`text-rose-400 hover:text-rose-350 cursor-pointer flex items-center gap-0.5 bg-transparent border-0 outline-none p-1.5 rounded transition-colors ${sidebarCollapsed ? 'bg-rose-955/10 hover:bg-rose-955/20 w-10 h-10 justify-center rounded-xl border border-rose-900/10' : ''}`}
               title="Logout Profile"
             >
               <LogOut className="size-4" />
             </button>
           </div>
 
-          <button
-            type="button"
-            id="btn-factory-reset"
-            onClick={handleResetSystem}
-            className="w-full py-2 bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 text-[10px] font-bold cursor-pointer mb-2"
-          >
-            <RotateCcw className="size-3 inline mr-1" />
-            Reset Family Default
-          </button>
+          {/* Reset Triggers */}
+          <div className={`flex flex-col gap-2 w-full ${sidebarCollapsed ? 'items-center border-t border-white/5 pt-2.5' : ''}`}>
+            <button
+              type="button"
+              id="btn-factory-reset"
+              onClick={handleResetSystem}
+              className={`bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 font-bold cursor-pointer flex items-center justify-center ${
+                sidebarCollapsed ? 'w-10 h-10 p-0 text-xs' : 'w-full py-2 text-[10px]'
+              }`}
+              title="Reset Family Default (Irreversible)"
+            >
+              <RotateCcw className={`size-3 ${sidebarCollapsed ? 'size-4' : 'mr-1'}`} />
+              {!sidebarCollapsed && 'Reset Family Default'}
+            </button>
 
-          <button
-            type="button"
-            id="btn-reset-expenses"
-            onClick={handleResetExpensesOnly}
-            className="w-full py-2 bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 text-[10px] font-bold cursor-pointer"
-          >
-            <RotateCcw className="size-3 inline mr-1" />
-            Reset Expenses Only
-          </button>
+            <button
+              type="button"
+              id="btn-reset-expenses"
+              onClick={handleResetExpensesOnly}
+              className={`bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 font-bold cursor-pointer flex items-center justify-center ${
+                sidebarCollapsed ? 'w-10 h-10 p-0 text-xs' : 'w-full py-2 text-[10px]'
+              }`}
+              title="Reset Expenses Only (Irreversible)"
+            >
+              <RotateCcw className={`size-3 ${sidebarCollapsed ? 'size-4' : 'mr-1'}`} />
+              {!sidebarCollapsed && 'Reset Expenses Only'}
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* 2. MOBILE Header with burger toggle drawer */}
+      {/* 2. MOBILE Header with sliding drawer trigger */}
       <header className="lg:hidden bg-[#090b11] text-white p-4 flex items-center justify-between border-b border-white/5 shrink-0">
         <div 
           onClick={() => navigate('/dashboard')} 
@@ -808,81 +845,125 @@ export default function App() {
           </button>
           
           <button 
-            onClick={() => handleLogout(true)}
-            className="text-slate-450 hover:text-rose-455 p-1 flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none text-xs font-semibold transition-colors"
-            title="Log Out"
-          >
-            <LogOut className="size-4" />
-          </button>
-          <button 
             type="button"
             id="btn-mobile-menu"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1.5 hover:bg-slate-855 rounded-md cursor-pointer"
+            onClick={() => setMobileMenuOpen(true)}
+            className="p-1.5 hover:bg-white/5 rounded-md cursor-pointer flex items-center justify-center text-slate-400 hover:text-white border border-white/5"
           >
-            {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            <Menu className="size-5" />
           </button>
         </div>
       </header>
 
-      {/* Mobile drawer drawer container */}
+      {/* Mobile Glass Backdrop & Sliding Drawer Sidebar */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-[#0d101d] border-b border-white/5 z-45 flex flex-col p-4 space-y-4 animate-fade-in relative shadow-lg">
-          <div className="grid grid-cols-2 gap-2">
-            {navItems.map(item => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  id={`mobile-nav-${item.id}`}
+        <>
+          {/* Backdrop overlay */}
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 transition-opacity duration-300 lg:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          
+          {/* Sliding sidebar panel */}
+          <aside className="fixed inset-y-0 left-0 w-72 bg-[#0d101d] border-r border-white/5 z-55 flex flex-col justify-between shadow-2xl animate-slide-in lg:hidden">
+            <div className="p-5 space-y-6">
+              
+              {/* Drawer header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="size-8 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white flex items-center justify-center font-bold text-xs">
+                    F
+                  </div>
+                  <h2 className="font-bold text-sm tracking-wide text-slate-100 font-sans">FamilyFunds</h2>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg cursor-pointer"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+
+              {/* Navigation list */}
+              <nav className="space-y-1">
+                {navItems.map(item => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      id={`mobile-nav-${item.id}`}
+                      onClick={() => {
+                        navigate('/' + item.id);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                        isActive 
+                          ? 'bg-emerald-950/30 text-emerald-450 border-l-2 border-emerald-500 font-bold' 
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <Icon className="size-4.5" />
+                      {item.name}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+
+            {/* Sync & account controls on bottom */}
+            <div className="p-5 border-t border-white/5 space-y-3.5 bg-[#090b11]/80">
+              <div className="flex justify-between items-center text-[10px] text-slate-500 font-semibold font-mono">
+                <span className="flex items-center gap-1.5">
+                  <CircleDot className={`size-2.5 ${isSyncing ? 'text-amber-500 animate-ping' : 'text-emerald-505'}`} />
+                  {isSyncing ? 'Syncing...' : 'Connected'}
+                </span>
+                <span>V3.5</span>
+              </div>
+              
+              <div className="text-xs text-slate-400 font-medium border-t border-white/5 pt-2.5 flex items-center justify-between gap-1">
+                <span className="truncate">Logged as: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
+                <button 
                   onClick={() => {
-                    navigate('/' + item.id);
+                    setMobileMenuOpen(false);
+                    handleLogout(true);
+                  }}
+                  className="text-rose-400 hover:text-rose-350 p-1 flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none"
+                  title="Logout Profile"
+                >
+                  <LogOut className="size-4" />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-2 pt-1.5">
+                <button
+                  type="button"
+                  id="btn-mobile-reset"
+                  onClick={() => {
+                    handleResetSystem();
                     setMobileMenuOpen(false);
                   }}
-                  className={`flex items-center gap-2.5 p-3 rounded-lg text-xs font-semibold ${
-                    activeTab === item.id 
-                      ? 'bg-emerald-600 text-white font-bold' 
-                      : 'bg-white/5 text-slate-350 hover:text-white'
-                  }`}
+                  className="w-full py-2.5 bg-white/5 hover:bg-rose-955/20 hover:text-rose-455 text-slate-450 rounded-xl text-xs font-bold cursor-pointer transition border border-white/5"
                 >
-                  <Icon className="size-3.5" />
-                  {item.name}
+                  Reset Database default
                 </button>
-              );
-            })}
-          </div>
-
-          <div className="pt-2 border-t border-white/5 space-y-2">
-            <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold font-mono">
-              <span>User: {currentUser?.name}</span>
+                <button
+                  type="button"
+                  id="btn-mobile-reset-expenses"
+                  onClick={() => {
+                    handleResetExpensesOnly();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full py-2.5 bg-white/5 hover:bg-rose-955/20 hover:text-rose-455 text-slate-450 rounded-xl text-xs font-bold cursor-pointer transition border border-white/5"
+                >
+                  Reset Expenses Only
+                </button>
+              </div>
             </div>
-            <div className="flex justify-between items-center gap-2 pt-1 border-t border-white/5">
-              <button
-                type="button"
-                id="btn-mobile-reset"
-                onClick={() => {
-                  handleResetSystem();
-                  setMobileMenuOpen(false);
-                }}
-                className="text-[10px] text-rose-400 hover:underline cursor-pointer font-bold bg-transparent border-0 p-0"
-              >
-                Reset Database default
-              </button>
-              <button
-                type="button"
-                id="btn-mobile-reset-expenses"
-                onClick={() => {
-                  handleResetExpensesOnly();
-                  setMobileMenuOpen(false);
-                }}
-                className="text-[10px] text-rose-400 hover:underline cursor-pointer font-bold bg-transparent border-0 p-0"
-              >
-                Reset Expenses Only
-              </button>
-            </div>
-          </div>
-        </div>
+          </aside>
+        </>
       )}
 
       {/* 3. MAIN Panel display canvas */}
