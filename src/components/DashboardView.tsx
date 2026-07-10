@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { DBState } from '../types';
 import { 
   DollarSign, 
@@ -38,10 +38,49 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
     return activeMonthExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   }, [activeMonthExpenses]);
 
+  // Spenders filter states
+  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  // Calculate unique months available for dropdown options
+  const monthOptions = useMemo(() => {
+    const monthsSet = new Set<string>();
+    expenses.forEach(exp => {
+      if (exp.date && exp.date.length >= 7) {
+        monthsSet.add(exp.date.slice(0, 7));
+      }
+    });
+    // Ensure current month is represented
+    const now = new Date();
+    monthsSet.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+  }, [expenses]);
+
+  // Format month YYYY-MM label to friendly string (e.g. "June 2026")
+  const formatMonthLabel = (ym: string) => {
+    const [year, month] = ym.split('-');
+    const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+
+  // Filter expenses matching the active selected billing period for leaderboard
+  const filteredExpensesForRanking = useMemo(() => {
+    if (selectedMonthFilter === 'overall') {
+      return expenses;
+    }
+    return expenses.filter(exp => exp.date && exp.date.startsWith(selectedMonthFilter));
+  }, [expenses, selectedMonthFilter]);
+
+  const filteredTotalSpend = useMemo(() => {
+    return filteredExpensesForRanking.reduce((sum, exp) => sum + exp.amount, 0);
+  }, [filteredExpensesForRanking]);
+
   // 2. User Wise Spend Breakdown
   const userSpendData = useMemo(() => {
     return users.map(u => {
-      const uSpent = expenses
+      const uSpent = filteredExpensesForRanking
         .filter(exp => exp.paidBy === u.id)
         .reduce((sum, exp) => sum + exp.amount, 0);
       return {
@@ -49,7 +88,7 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
         amount: uSpent
       };
     }).filter(d => d.amount > 0).sort((a, b) => b.amount - a.amount);
-  }, [expenses, users]);
+  }, [filteredExpensesForRanking, users]);
 
   // 3. Category-wise Spending
   const categorySpendData = useMemo(() => {
@@ -121,58 +160,18 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
       </div>
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Total Spending */}
-        <div className="bg-[#111420]/80 p-5 rounded-2xl shadow-sm border border-white/5 flex items-center gap-4 hover:border-emerald-500/20 transition backdrop-blur-md">
-          <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-450">
-            <DollarSign className="size-6" />
-          </div>
-          <div>
-            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Total Spending</p>
-            <h3 className="text-2xl font-bold font-mono text-white mt-1">₹{totalSpend.toLocaleString('en-IN')}</h3>
-            <p className="text-slate-550 text-xs mt-0.5 font-semibold">Across all registered groups</p>
-          </div>
-        </div>
-
+      <div className="max-w-md">
         {/* Monthly Splurge */}
         <div className="bg-[#111420]/80 p-5 rounded-2xl shadow-sm border border-white/5 flex items-center gap-4 hover:border-emerald-500/20 transition backdrop-blur-md">
           <div className="p-3 bg-teal-500/10 rounded-xl text-teal-400">
             <Calendar className="size-6" />
           </div>
           <div>
-            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">This Month</p>
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">This Month's Spending</p>
             <h3 className="text-2xl font-bold font-mono text-white mt-1">₹{monthlyTotal.toLocaleString('en-IN')}</h3>
             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 mt-1">
-              <TrendingUp className="size-2.5" /> Active Billing
+              <TrendingUp className="size-2.5" /> Active Billing Month
             </span>
-          </div>
-        </div>
-
-        {/* Groups Active */}
-        <div className="bg-[#111420]/80 p-5 rounded-2xl shadow-sm border border-white/5 flex items-center gap-4 hover:border-emerald-500/20 transition backdrop-blur-md">
-          <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500">
-            <Users className="size-6" />
-          </div>
-          <div>
-            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Active Groups</p>
-            <h3 className="text-2xl font-bold font-mono text-white mt-1">{groups.length} Groups</h3>
-            <p className="text-slate-555 text-xs mt-0.5 font-semibold">{users.length} Family members total</p>
-          </div>
-        </div>
-
-        {/* Top Spending Segment */}
-        <div className="bg-[#111420]/80 p-5 rounded-2xl shadow-sm border border-white/5 flex items-center gap-4 hover:border-emerald-500/20 transition backdrop-blur-md">
-          <div className="p-3 bg-emerald-650/10 rounded-xl text-emerald-450">
-            <ShoppingBag className="size-6" />
-          </div>
-          <div>
-            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Top Spend Segment</p>
-            <h3 className="text-lg font-bold text-white truncate max-w-[170px] mt-1">
-              {categorySpendData[0]?.name || 'No spend yet'}
-            </h3>
-            <p className="text-slate-555 text-xs mt-0.5 font-semibold">
-              {categorySpendData[0] ? `₹${categorySpendData[0].value.toLocaleString('en-IN')} (${categorySpendData[0].percentage}%)` : 'Keep logging'}
-            </p>
           </div>
         </div>
       </div>
@@ -180,7 +179,10 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Analytics promo card (2 columns on lg) */}
-        <div className="bg-[#111420]/80 p-8 rounded-2xl border border-white/5 shadow-sm lg:col-span-2 flex flex-col justify-between backdrop-blur-md relative overflow-hidden group min-h-[300px]">
+        <div 
+          onClick={() => onNavigate('analysis')}
+          className="bg-[#111420]/80 p-8 rounded-2xl border border-white/5 shadow-sm lg:col-span-2 flex flex-col justify-between backdrop-blur-md relative overflow-hidden group min-h-[300px] cursor-pointer hover:border-emerald-500/20 transition-all"
+        >
           <div className="absolute right-0 bottom-0 translate-x-12 translate-y-12 opacity-5 group-hover:opacity-10 transition-opacity">
             <PieIcon className="size-64 text-emerald-500" />
           </div>
@@ -197,7 +199,10 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
           </div>
           <div className="pt-6">
             <button
-              onClick={() => onNavigate('analysis')}
+              onClick={(e) => {
+                e.stopPropagation(); // Avoid double navigation triggers
+                onNavigate('analysis');
+              }}
               className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-650 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950/20 flex items-center gap-1.5 cursor-pointer"
             >
               <span>View Analytics & Trend Graphs</span>
@@ -209,16 +214,30 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
         {/* User Ranking (1 column on lg) */}
         <div className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm min-w-0 flex flex-col justify-between backdrop-blur-md">
           <div>
-            <h3 className="text-white font-semibold font-sans text-base">Individual Spenders</h3>
-            <p className="text-slate-500 text-xs">Tracking individual spending transactions volume</p>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-white font-semibold font-sans text-base">Individual Spenders</h3>
+              <select
+                value={selectedMonthFilter}
+                onChange={(e) => setSelectedMonthFilter(e.target.value)}
+                className="bg-[#090b11]/80 border border-white/5 px-2.5 py-1 rounded-lg text-slate-300 text-[10px] font-bold focus:outline-none cursor-pointer"
+              >
+                <option value="overall" className="bg-[#0f121d] text-white">Overall (All-Time)</option>
+                {monthOptions.map(ym => (
+                  <option key={ym} value={ym} className="bg-[#0f121d] text-white">
+                    {formatMonthLabel(ym)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-slate-500 text-xs mt-0.5">Tracking individual spending transactions volume</p>
           </div>
 
           <div className="divide-y divide-white/5 flex-1 mt-2 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
             {userSpendData.length === 0 ? (
-              <p className="text-slate-500 text-center py-12 text-xs">No users have spent money yet.</p>
+              <p className="text-slate-500 text-center py-12 text-xs">No users have spent money in this period.</p>
             ) : (
               userSpendData.map((user) => {
-                const percentage = totalSpend > 0 ? (user.amount / totalSpend) * 100 : 0;
+                const percentage = filteredTotalSpend > 0 ? (user.amount / filteredTotalSpend) * 100 : 0;
                 return (
                   <div key={user.name} className="py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 shrink-0">
@@ -308,6 +327,27 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
             })}
           </div>
         )}
+      </div>
+
+      {/* Total Spending Banner (Full Width at Bottom) */}
+      <div className="bg-[#111420]/80 p-6 rounded-2xl shadow-sm border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 hover:border-emerald-500/20 transition-all backdrop-blur-md">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-450">
+            <DollarSign className="size-6" />
+          </div>
+          <div>
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Total Family Spending (All-Time)</p>
+            <h3 className="text-2xl font-bold font-mono text-white mt-0.5">₹{totalSpend.toLocaleString('en-IN')}</h3>
+            <p className="text-slate-500 text-xs font-semibold">Cumulative sum of all registered subgroups' transaction records</p>
+          </div>
+        </div>
+        <button
+          onClick={() => onNavigate('analysis')}
+          className="px-4 py-2 bg-[#1a1e30] hover:bg-[#252b44] text-slate-200 border border-white/5 font-bold transition rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0"
+        >
+          <span>View Analytics Breakdown</span>
+          <ArrowUpRight className="size-3.5" />
+        </button>
       </div>
     </div>
   );
