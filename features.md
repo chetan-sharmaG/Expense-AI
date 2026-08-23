@@ -46,7 +46,7 @@ An automated clearing house calculating cross-group debts:
 
 ## 🤖 5. Groq AI Financial Advisor (In-App Chat)
 
-An inline AI consultant providing insights on family spending patterns powered by **Groq** (`llama-3.3-70b-versatile`):
+An inline AI consultant providing insights on family spending patterns powered by **Groq** (`openai/gpt-oss-120b`):
 - **Context-Aware Reports**: Synchronizes all live database metrics (expenses list, categories, group budgets, settlements) directly with Groq prompts.
 - **Private Conversations**: Stores conversation history in MongoDB per `userId`, allowing individual family members to maintain private consulting histories.
 - **Quick Action Chips**:
