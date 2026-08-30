@@ -35,7 +35,32 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [dbState, setDbState] = useState<DBState | null>(null);
+  const [dbState, setDbStateRaw] = useState<DBState | null>(() => {
+    try {
+      const cached = localStorage.getItem('family_funds_db_state');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // State setter wrapper that keeps localStorage cache in sync
+  const setDbState = (newState: DBState | null | ((prev: DBState | null) => DBState | null)) => {
+    setDbStateRaw((prev) => {
+      const updated = typeof newState === 'function' ? newState(prev) : newState;
+      if (updated) {
+        try {
+          localStorage.setItem('family_funds_db_state', JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Failed to cache dbState:', e);
+        }
+      } else {
+        localStorage.removeItem('family_funds_db_state');
+      }
+      return updated;
+    });
+  };
+
   const navigate = useNavigate();
   const location = useLocation();
   const activeTab = location.pathname.replace(/^\//, '') || 'dashboard';
@@ -141,6 +166,7 @@ export default function App() {
     }
     localStorage.removeItem('family_funds_token');
     localStorage.removeItem('family_funds_user');
+    localStorage.removeItem('family_funds_db_state');
     setUserToken(null);
     setCurrentUser(null);
     setDbState(null);

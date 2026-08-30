@@ -57,13 +57,13 @@ function authenticateJWT(req: any, res: any, next: any) {
 // ------------------- DATABASE STATE FETCH HELPER -------------------
 async function getDBState(userId?: string) {
   const [family, groups, users, expenses, settlements, whatsappChat, advisorChat] = await Promise.all([
-    FamilyModel.findOne(),
-    GroupModel.find(),
-    UserModel.find({}, { password: 0 }), // Exclude passwords from UI payload
-    ExpenseModel.find(),
-    SettlementModel.find(),
-    WhatsAppChatModel.find(),
-    userId ? AdvisorChatModel.find({ userId }).sort({ timestamp: 1 }) : []
+    FamilyModel.findOne().lean(),
+    GroupModel.find().lean(),
+    UserModel.find({}, { password: 0 }).lean(), // Exclude passwords from UI payload
+    ExpenseModel.find().lean(),
+    SettlementModel.find().lean(),
+    WhatsAppChatModel.find().lean(),
+    userId ? AdvisorChatModel.find({ userId }).sort({ timestamp: 1 }).lean() : []
   ]);
 
   return {
@@ -259,7 +259,7 @@ app.post('/api/auth/login', async (req, res) => {
 // Public APIs: Retrieve groups for registration dropdown
 app.get('/api/public/groups', async (req, res) => {
   try {
-    const groups = await GroupModel.find({}, { _id: 0 });
+    const groups = await GroupModel.find({}, { _id: 0 }).lean();
     res.json({ success: true, groups });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve groups', message: err.message });
