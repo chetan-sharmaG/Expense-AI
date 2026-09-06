@@ -197,12 +197,12 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
   return (
     <div className="space-y-6">
       {/* Visual Analytics Title Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#111420]/80 p-6 rounded-2xl text-white shadow-sm border border-white/5 relative overflow-hidden backdrop-blur-md">
+      <div className="glass-card p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden border border-white/10">
         <div className="relative z-10">
-          <h1 className="text-xl font-bold tracking-tight font-sans flex items-center gap-2">
-            <Activity className="size-5 text-emerald-450" /> Spending Visual Analysis
+          <h1 className="text-2xl font-extrabold tracking-tight font-sans flex items-center gap-2.5 gradient-text-aurora">
+            <Activity className="size-6 text-emerald-400" /> Spending Visual Analysis
           </h1>
-          <p className="text-slate-400 text-xs mt-1 font-semibold">
+          <p className="text-slate-300 text-xs mt-1.5 font-medium">
             Track monthly cumulative spend trends, category budget shares, and sub-group contributions.
           </p>
         </div>
@@ -214,41 +214,41 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
         {/* Trend Area Chart (Left 2 Columns) - Clickable to open Modal */}
         <div 
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm lg:col-span-2 min-w-0 space-y-4 backdrop-blur-md cursor-pointer hover:border-emerald-500/20 transition-all select-none group"
+          className="glass-card glass-card-hover p-7 rounded-3xl lg:col-span-2 min-w-0 space-y-5 cursor-pointer select-none group"
         >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-white font-semibold font-sans text-base">Expense Splurge Trend</h3>
-                <Maximize2 className="size-3.5 text-slate-550 group-hover:text-emerald-450 transition-colors" />
+                <h3 className="text-white font-extrabold font-sans text-lg">Expense Splurge Trend</h3>
+                <Maximize2 className="size-4 text-slate-400 group-hover:text-emerald-400 transition-colors" />
               </div>
-              <p className="text-slate-500 text-xs">Monthly spending trend over the last 5 months. Click to expand.</p>
+              <p className="text-slate-400 text-xs mt-0.5 font-medium">Monthly spending trend over the last 5 months. Click to expand.</p>
             </div>
-            <span className="text-xs bg-[#090b11]/80 border border-white/5 text-slate-400 px-2.5 py-1 rounded-lg flex items-center gap-1 font-medium font-mono">
-              <TrendingUp className="size-3 text-emerald-400" /> INR (₹)
+            <span className="text-xs bg-[#090c19] border border-white/10 text-emerald-400 px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold font-mono">
+              <TrendingUp className="size-3.5 text-emerald-400" /> INR (₹)
             </span>
           </div>
 
-          <div className="h-56 sm:h-72 w-full">
+          <div className="h-60 sm:h-72 w-full">
             {expenses.length === 0 ? (
-              <div className="text-center py-20 text-slate-500">No transactions recorded yet.</div>
+              <div className="text-center py-20 text-slate-500 font-medium">No transactions recorded yet.</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={splurgeTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorSpend" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.35}/>
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="date" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} formatter={(v: any) => `₹${v.toLocaleString('en-IN')}`} />
+                  <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} formatter={(v: any) => `₹${v.toLocaleString('en-IN')}`} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#111420', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', color: '#fff' }}
-                    labelStyle={{ fontWeight: 'bold', color: '#cbd5e1' }}
+                    contentStyle={{ backgroundColor: '#090c19', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                    labelStyle={{ fontWeight: 'bold', color: '#34d399' }}
                     formatter={(v: any) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Spend']}
                   />
-                  <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSpend)" name="Amount Spend" />
+                  <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorSpend)" name="Amount Spend" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -256,17 +256,17 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
         </div>
 
         {/* Category Breakdown Donut (Right 1 Column) */}
-        <div className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm flex flex-col justify-between min-w-0 space-y-4 backdrop-blur-md">
+        <div className="glass-card p-7 rounded-3xl flex flex-col justify-between min-w-0 space-y-5">
           <div className="flex items-start justify-between">
             <div className="min-w-0 pr-2">
-              <h3 className="text-white font-semibold font-sans text-base">Category Allocation</h3>
-              <p className="text-slate-500 text-xs">Percentage distribution of family finances</p>
+              <h3 className="text-white font-extrabold font-sans text-lg">Category Allocation</h3>
+              <p className="text-slate-400 text-xs font-medium">Percentage distribution of family finances</p>
             </div>
             <select
               value={selectedAllocationMonth}
               onChange={(e) => setSelectedAllocationMonth(e.target.value)}
-              onClick={(e) => e.stopPropagation()} // Prevent any parent clicks
-              className="bg-[#090b11]/85 border border-white/5 text-slate-350 text-[11px] rounded-lg px-2.5 py-1 focus:outline-none focus:border-emerald-500 font-semibold cursor-pointer shrink-0 max-w-[110px] truncate"
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#090c19] border border-white/10 text-slate-200 text-xs font-mono font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:border-emerald-400 cursor-pointer shrink-0 max-w-[120px] truncate"
             >
               <option value="all">Overall</option>
               {availableAllocationMonths.map(m => {
@@ -279,8 +279,8 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
 
           <div className="h-56 relative flex items-center justify-center">
             {categorySpendData.length === 0 ? (
-              <div className="text-center py-6 text-slate-500">
-                <PieIcon className="size-12 mx-auto stroke-slate-800" />
+              <div className="text-center py-6 text-slate-500 font-medium">
+                <PieIcon className="size-12 mx-auto stroke-slate-700" />
                 <p className="text-xs mt-2">No logging details found yet.</p>
               </div>
             ) : (
@@ -290,9 +290,9 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
                     data={categorySpendData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={55}
-                    outerRadius={80}
-                    paddingAngle={3}
+                    innerRadius={58}
+                    outerRadius={82}
+                    paddingAngle={4}
                     dataKey="value"
                   >
                     {categorySpendData.map((entry, index) => (
@@ -300,16 +300,16 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#111420', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', color: '#fff' }}
+                    contentStyle={{ backgroundColor: '#090c19', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                     formatter={(value: any) => `₹${Number(value).toLocaleString('en-IN')}`} 
                   />
                 </PieChart>
               </ResponsiveContainer>
             )}
             {categorySpendData.length > 0 && (
-              <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-[10px] text-slate-500 font-medium font-sans uppercase tracking-wider font-semibold">Top Share</span>
-                <span className="text-base font-bold text-emerald-450 font-mono mt-0.5">
+              <div className="absolute flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider font-bold">Top Share</span>
+                <span className="text-lg font-extrabold text-emerald-400 font-mono mt-0.5">
                   {categorySpendData[0]?.percentage}%
                 </span>
               </div>
@@ -318,10 +318,10 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
 
           <div className="grid grid-cols-2 gap-2 text-xs overflow-y-auto max-h-36 pr-1 custom-scrollbar">
             {categorySpendData.slice(0, 6).map((entry, idx) => (
-              <div key={entry.name} className="flex items-center gap-1.5 truncate">
-                <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                <span className="text-slate-300 truncate font-semibold">{entry.name}</span>
-                <span className="text-slate-550 font-mono shrink-0">({entry.percentage}%)</span>
+              <div key={entry.name} className="flex items-center gap-2 truncate">
+                <span className="size-3 rounded-full shrink-0 glow-pill" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                <span className="text-slate-200 truncate font-semibold">{entry.name}</span>
+                <span className="text-emerald-400/90 font-mono font-bold text-[10px] shrink-0">({entry.percentage}%)</span>
               </div>
             ))}
           </div>
@@ -329,28 +329,30 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
       </div>
 
       {/* Group Contribution comparisons */}
-      <div className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm min-w-0 space-y-4 backdrop-blur-md">
+      <div className="glass-card p-7 rounded-3xl min-w-0 space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-white font-semibold font-sans text-base">Group Contribution & Spend Comparison</h3>
-            <p className="text-slate-500 text-xs">Total volume mapped across family sub-groups (e.g. couples, parents)</p>
+            <h3 className="text-white font-extrabold font-sans text-lg">Group Contribution & Spend Comparison</h3>
+            <p className="text-slate-400 text-xs font-medium">Total volume mapped across family sub-groups (e.g. couples, parents)</p>
           </div>
-          <Layers className="size-5 text-emerald-450" />
+          <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+            <Layers className="size-5" />
+          </div>
         </div>
 
-        <div className="h-56 sm:h-72 w-full">
+        <div className="h-60 sm:h-72 w-full">
           {groupSpendData.length === 0 ? (
-            <p className="text-slate-500 text-center py-16 text-sm">No group data mapped.</p>
+            <p className="text-slate-500 text-center py-16 text-sm font-medium">No group data mapped.</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={groupSpendData} margin={{ top: 20, right: 10, left: -20, bottom: 5 }}>
-                <XAxis dataKey="name" fontSize={11} stroke="#475569" tickLine={false} axisLine={false} />
-                <YAxis fontSize={11} stroke="#475569" tickLine={false} axisLine={false} />
+                <XAxis dataKey="name" fontSize={11} stroke="#64748b" tickLine={false} axisLine={false} />
+                <YAxis fontSize={11} stroke="#64748b" tickLine={false} axisLine={false} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#111420', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', color: '#fff' }}
+                  contentStyle={{ backgroundColor: '#090c19', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                   formatter={(v) => `₹${v.toLocaleString('en-IN')}`} 
                 />
-                <Bar dataKey="amount" radius={[8, 8, 0, 0]} name="Spent">
+                <Bar dataKey="amount" radius={[10, 10, 0, 0]} name="Spent">
                   {groupSpendData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
@@ -362,16 +364,18 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
       </div>
 
       {/* Group Budget Mapped Progress Meters */}
-      <div className="bg-[#111420]/80 p-6 rounded-2xl border border-white/5 shadow-sm space-y-4 backdrop-blur-md">
+      <div className="glass-card p-7 rounded-3xl space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-white font-semibold font-sans text-base">Monthly Budget Targets & Consumption</h3>
-            <p className="text-slate-500 text-xs font-semibold">Tracking active spending targets per family group</p>
+            <h3 className="text-white font-extrabold font-sans text-lg">Monthly Budget Targets & Consumption</h3>
+            <p className="text-slate-400 text-xs font-medium">Tracking active spending targets per family group</p>
           </div>
-          <Activity className="size-5 text-emerald-450" />
+          <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+            <Activity className="size-5" />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {groups.map(grp => {
             const currentMonthExpenses = expenses.filter(exp => {
               if (exp.groupId !== grp.id) return false;
@@ -385,50 +389,50 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
               : 0;
 
             return (
-              <div key={grp.id} className="bg-[#090b11]/40 p-4 rounded-xl border border-white/5 space-y-3 hover:border-emerald-500/20 transition-all flex flex-col justify-between">
+              <div key={grp.id} className="glass-panel p-5 rounded-2xl border border-white/5 space-y-3.5 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-slate-200">{grp.name.split(' (')[0]}</span>
+                  <span className="text-base font-bold text-slate-100">{grp.name.split(' (')[0]}</span>
                   {grp.monthlyBudget && grp.monthlyBudget > 0 ? (
-                    <span className="text-xs bg-[#111420] border border-white/5 text-slate-350 px-2 py-0.5 rounded-md font-mono">
+                    <span className="text-xs bg-[#090c19] border border-white/10 text-slate-300 px-3 py-1 rounded-xl font-mono font-bold">
                       Limit: ₹{grp.monthlyBudget.toLocaleString('en-IN')}
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-550 italic font-semibold">No budget limit set</span>
+                    <span className="text-[11px] text-slate-500 italic font-semibold">No budget limit set</span>
                   )}
                 </div>
 
                 {grp.monthlyBudget && grp.monthlyBudget > 0 ? (
                   <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-400 font-semibold">
-                        Spent: <b className="font-mono text-white">₹{spentThisMonth.toLocaleString('en-IN')}</b>
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <span className="text-slate-400 font-medium">
+                        Spent: <b className="text-white font-bold">₹{spentThisMonth.toLocaleString('en-IN')}</b>
                       </span>
-                      <span className={`font-bold font-mono text-xs ${budgetPercentage > 100 ? 'text-rose-455' : budgetPercentage > 75 ? 'text-amber-500' : 'text-emerald-450'}`}>
+                      <span className={`font-extrabold text-xs ${budgetPercentage > 100 ? 'text-rose-400' : budgetPercentage > 75 ? 'text-amber-400' : 'text-emerald-400'}`}>
                         {Math.round(budgetPercentage)}%
                       </span>
                     </div>
 
-                    <div className="w-full bg-[#111420] rounded-full h-1.5 border border-white/5 overflow-hidden">
+                    <div className="w-full bg-[#080b15] rounded-full h-2.5 border border-white/5 overflow-hidden">
                       <div 
-                        className={`h-1.5 rounded-full transition-all duration-500 ${
+                        className={`h-full rounded-full transition-all duration-500 ${
                           budgetPercentage > 100 
                             ? 'bg-rose-500' 
                             : budgetPercentage > 75 
-                              ? 'bg-amber-500' 
-                              : 'bg-emerald-500'
+                              ? 'bg-amber-400' 
+                              : 'bg-emerald-400'
                         }`}
                         style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
                       />
                     </div>
 
                     {budgetPercentage > 100 && (
-                      <div className="text-[10px] text-rose-455 font-semibold flex items-center gap-1.5 animate-pulse bg-rose-955/20 border border-rose-900/30 p-1.5 rounded-lg">
+                      <div className="text-xs text-rose-300 font-semibold flex items-center gap-2 animate-pulse bg-rose-955/30 border border-rose-500/30 p-2 rounded-xl mt-1">
                         ⚠️ Limit Exceeded! Splurge warning active for this subgroup.
                       </div>
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-500 italic py-1">Set monthly limit under "Family & Groups" settings menu to track progress.</p>
+                  <p className="text-xs text-slate-400 italic py-1 font-medium">Set monthly limit under "Family & Groups" settings menu to track progress.</p>
                 )}
               </div>
             );
@@ -438,23 +442,23 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
 
       {/* Splurge Modal Details */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#07090e]/85 backdrop-blur-md animate-fade-in">
-          <div className="bg-[#111420] border border-white/5 rounded-3xl p-6 w-full max-w-4xl max-h-[90vh] shadow-2xl flex flex-col space-y-6 relative overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-fade-in">
+          <div className="glass-card border border-white/10 rounded-3xl p-7 w-full max-w-4xl max-h-[90vh] shadow-2xl flex flex-col space-y-6 relative overflow-hidden">
             
             {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-white/5 pb-4 shrink-0">
+            <div className="flex items-start justify-between border-b border-white/10 pb-4 shrink-0">
               <div>
-                <h3 className="text-white font-bold font-sans text-lg flex items-center gap-2">
-                  <Activity className="size-5 text-emerald-450" /> Complete Spending Trend Breakdown
+                <h3 className="text-white font-extrabold font-sans text-xl flex items-center gap-2.5 gradient-text-aurora">
+                  <Activity className="size-6 text-emerald-400" /> Complete Spending Trend Breakdown
                 </h3>
-                <p className="text-slate-400 text-xs mt-0.5 font-semibold">
+                <p className="text-slate-400 text-xs mt-1 font-medium">
                   Historical month-on-month expense spline logs since first transaction.
                 </p>
               </div>
               <button 
                 type="button" 
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-[#1a1e30] transition cursor-pointer"
+                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-white/5 transition cursor-pointer"
               >
                 <X className="size-5" />
               </button>
@@ -462,21 +466,21 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
 
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 shrink-0">
-              <div className="bg-[#090b11]/50 p-4 rounded-2xl border border-white/5">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Spent (All-Time)</span>
-                <span className="text-lg font-bold text-white font-mono mt-1 block">₹{totalAllTimeSpend.toLocaleString('en-IN')}</span>
+              <div className="glass-panel p-4 rounded-2xl border border-white/5">
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block">Total Spent (All-Time)</span>
+                <span className="text-lg font-extrabold text-white font-mono mt-1 block">₹{totalAllTimeSpend.toLocaleString('en-IN')}</span>
               </div>
-              <div className="bg-[#090b11]/50 p-4 rounded-2xl border border-white/5">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Average Monthly Spend</span>
-                <span className="text-lg font-bold text-emerald-450 font-mono mt-1 block">₹{avgMonthlySpend.toLocaleString('en-IN')}</span>
+              <div className="glass-panel p-4 rounded-2xl border border-white/5">
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block">Average Monthly Spend</span>
+                <span className="text-lg font-extrabold text-emerald-400 font-mono mt-1 block">₹{avgMonthlySpend.toLocaleString('en-IN')}</span>
               </div>
-              <div className="bg-[#090b11]/50 p-4 rounded-2xl border border-white/5">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Tracked Months</span>
-                <span className="text-lg font-bold text-white font-mono mt-1 block">{splurgeTrendAllMonths.length}</span>
+              <div className="glass-panel p-4 rounded-2xl border border-white/5">
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block">Tracked Months</span>
+                <span className="text-lg font-extrabold text-white font-mono mt-1 block">{splurgeTrendAllMonths.length}</span>
               </div>
-              <div className="bg-[#090b11]/50 p-4 rounded-2xl border border-white/5">
-                <span className="text-[10px] text-slate-550 font-bold uppercase tracking-wider block">Transactions Count</span>
-                <span className="text-lg font-bold text-white font-mono mt-1 block">{expenses.length}</span>
+              <div className="glass-panel p-4 rounded-2xl border border-white/5">
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block">Transactions Count</span>
+                <span className="text-lg font-extrabold text-white font-mono mt-1 block">{expenses.length}</span>
               </div>
             </div>
 
@@ -484,44 +488,44 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-0 flex-1 overflow-y-auto custom-scrollbar">
               
               {/* Detailed Chart (Left 3 cols) */}
-              <div className="lg:col-span-3 h-64 lg:h-full min-h-[250px] bg-[#090b11]/20 p-4 rounded-2xl border border-white/5 flex flex-col justify-between">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-2">Visual Spline Curve</span>
+              <div className="lg:col-span-3 h-64 lg:h-full min-h-[250px] glass-panel p-5 rounded-2xl border border-white/5 flex flex-col justify-between">
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block mb-2">Visual Spline Curve</span>
                 <div className="w-full flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={splurgeTrendAllMonths} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorSpendAll" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.35}/>
                           <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
-                      <XAxis dataKey="date" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} formatter={(v: any) => `₹${v.toLocaleString('en-IN')}`} />
+                      <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} formatter={(v: any) => `₹${v.toLocaleString('en-IN')}`} />
                       <Tooltip 
-                        contentStyle={{ backgroundColor: '#111420', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', color: '#fff' }}
-                        labelStyle={{ fontWeight: 'bold', color: '#cbd5e1' }}
+                        contentStyle={{ backgroundColor: '#090c19', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                        labelStyle={{ fontWeight: 'bold', color: '#34d399' }}
                         formatter={(v: any) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Spend']}
                       />
-                      <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSpendAll)" name="Spend" />
+                      <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorSpendAll)" name="Spend" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
               {/* Table / List View (Right 2 cols) */}
-              <div className="lg:col-span-2 flex flex-col justify-between min-h-[250px] bg-[#090b11]/30 border border-white/5 rounded-2xl p-4 overflow-hidden">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-3 shrink-0">Statement Breakdown</span>
+              <div className="lg:col-span-2 flex flex-col justify-between min-h-[250px] glass-panel border border-white/5 rounded-2xl p-5 overflow-hidden">
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block mb-3 shrink-0">Statement Breakdown</span>
                 <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
                   {[...splurgeTrendAllMonths].reverse().map((item, idx) => {
                     const maxVal = Math.max(...splurgeTrendAllMonths.map(i => i.amount), 1);
                     const percentageWidth = Math.round((item.amount / maxVal) * 100);
 
                     return (
-                      <div key={idx} className="bg-[#111420]/70 p-3 rounded-xl border border-white/5 flex items-center justify-between gap-4">
+                      <div key={idx} className="glass-card p-3 rounded-xl border border-white/5 flex items-center justify-between gap-4">
                         <div className="min-w-0 flex-1 space-y-1.5">
-                          <span className="text-xs font-bold text-slate-205 block">{item.date}</span>
-                          <div className="w-full bg-[#090b11] h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-emerald-500 h-full rounded-full transition-all duration-300" style={{ width: `${percentageWidth}%` }} />
+                          <span className="text-xs font-bold text-slate-200 block">{item.date}</span>
+                          <div className="w-full bg-[#080b15] h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-emerald-400 h-full rounded-full transition-all duration-300" style={{ width: `${percentageWidth}%` }} />
                           </div>
                         </div>
                         <div className="text-right shrink-0">
@@ -536,11 +540,11 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex justify-end pt-2 border-t border-white/5 shrink-0">
+            <div className="flex justify-end pt-3 border-t border-white/10 shrink-0">
               <button 
                 type="button" 
                 onClick={() => setIsModalOpen(false)}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition shadow-sm"
+                className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-bold font-mono rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-emerald-500/20 hover:scale-[1.02] transition-all"
               >
                 Close View
               </button>

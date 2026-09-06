@@ -18,7 +18,6 @@ import {
   WalletCards, 
   Users2, 
   MessageSquareCode, 
-  RotateCcw, 
   CircleDot, 
   Layers, 
   Activity,
@@ -542,33 +541,43 @@ export default function App() {
   ];
 
   // Auth Guard
+  // Auth Guard
   if (!userToken || !currentUser) {
     return (
-      <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        {/* Glow orbs */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-gradient-to-tr from-emerald-500/10 to-amber-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+      <div className="min-h-screen bg-[#05070d] text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        {/* Glow background mesh */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-gradient-to-tr from-emerald-500/15 via-teal-500/10 to-amber-500/10 rounded-full blur-[140px] pointer-events-none animate-aura-glow"></div>
+        <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none"></div>
 
         {/* Brand header */}
-        <div className="flex items-center gap-3 mb-8 relative z-10 animate-fade-in">
-          <div className="size-11 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-xl text-white shadow-lg shadow-emerald-950/20 flex items-center justify-center font-bold font-mono text-xl">
+        <div className="flex items-center gap-3.5 mb-8 relative z-10">
+          <div className="size-12 bg-gradient-to-tr from-emerald-400 via-teal-500 to-amber-400 rounded-2xl text-slate-950 shadow-xl shadow-emerald-500/20 flex items-center justify-center font-extrabold font-mono text-2xl glow-pill">
             F
           </div>
           <div>
-            <h1 className="font-bold text-2xl tracking-tight text-white font-sans">FamilyFunds</h1>
-            <span className="text-[9px] text-slate-500 font-extrabold tracking-widest uppercase font-mono block mt-0.5">Secure Ledger Vault</span>
+            <h1 className="font-extrabold text-3xl tracking-tight text-white font-sans gradient-text-aurora animate-text-shimmer">
+              FamilyFunds
+            </h1>
+            <span className="text-[10px] text-emerald-400/80 font-mono tracking-widest uppercase font-semibold block mt-0.5">
+              Multi-Group Family Vault
+            </span>
           </div>
         </div>
 
         {/* Auth Box */}
-        <div className="bg-[#0f121d]/80 border border-white/5 rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl space-y-6 relative z-10 backdrop-blur-xl">
-          <div className="space-y-1">
-            <h2 className="text-xl font-bold text-white tracking-tight">Sharma Family Vault</h2>
-            <p className="text-slate-400 text-xs font-semibold">Verify credentials or onboard a new member profile.</p>
+        <div className="glass-card border border-white/10 rounded-3xl p-7 sm:p-9 w-full max-w-md shadow-2xl space-y-6 relative z-10 backdrop-blur-2xl">
+          <div className="space-y-1 text-center sm:text-left">
+            <h2 className="text-xl font-extrabold text-white tracking-tight font-sans">
+              {isRegisterMode ? 'Onboard Member Profile' : 'Access Family Vault'}
+            </h2>
+            <p className="text-slate-400 text-xs font-medium">
+              {isRegisterMode ? 'Join your family ledger group with secure credentials.' : 'Verify authorization credentials to access live ledgers.'}
+            </p>
           </div>
 
           {loginError && (
-            <div className="p-3 bg-rose-950/20 border border-rose-900/30 text-rose-450 text-xs font-semibold rounded-xl flex items-center gap-1.5 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+            <div className="p-3.5 bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs font-semibold rounded-2xl flex items-center gap-2 animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0"></span>
               {loginError}
             </div>
           )}
@@ -577,120 +586,120 @@ export default function App() {
             /* REGISTRATION FORM */
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Full Name</label>
+                <label className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Full Name</label>
                 <input 
                   type="text" 
                   required
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
-                  placeholder="e.g. Aunt Meera"
-                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
+                  placeholder="e.g. Meera Sharma"
+                  className="w-full px-4 py-3 bg-[#080b15]/90 border border-white/10 focus:border-emerald-400 text-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/20 font-medium transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Email Address</label>
+                <label className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Email Address</label>
                 <input 
                   type="email" 
                   required
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
                   placeholder="meera@family.com"
-                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
+                  className="w-full px-4 py-3 bg-[#080b15]/90 border border-white/10 focus:border-emerald-400 text-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/20 font-medium transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Password</label>
+                <label className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Password</label>
                 <input 
                   type="password" 
                   required
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold font-mono transition-all"
+                  className="w-full px-4 py-3 bg-[#080b15]/90 border border-white/10 focus:border-emerald-400 text-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/20 font-medium font-mono transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Family Group Allocation</label>
+                <label className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Family Group Allocation</label>
                 <select
                   required
                   value={regGroupId}
                   onChange={(e) => setRegGroupId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-300 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
+                  className="w-full px-4 py-3 bg-[#080b15]/90 border border-white/10 focus:border-emerald-400 text-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/20 font-medium transition-all cursor-pointer"
                 >
                   {publicGroups.map(g => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
+                    <option key={g.id} value={g.id} className="bg-[#0c0f1d] text-slate-200">{g.name}</option>
                   ))}
                 </select>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">WhatsApp Number (Optional)</label>
+                <label className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">WhatsApp Number (Optional)</label>
                 <input 
                   type="text" 
                   value={regWhatsapp}
                   onChange={(e) => setRegWhatsapp(e.target.value)}
-                  placeholder="e.g. 919876543210 (with country code)"
-                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
+                  placeholder="e.g. 919876543210"
+                  className="w-full px-4 py-3 bg-[#080b15]/90 border border-white/10 focus:border-emerald-400 text-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/20 font-medium transition-all"
                 />
               </div>
 
               <button 
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/20 cursor-pointer transition disabled:opacity-50"
+                className="w-full py-3.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-2xl text-xs uppercase tracking-wider font-mono shadow-lg shadow-emerald-500/25 cursor-pointer transition-all disabled:opacity-50 mt-2"
               >
-                {authLoading ? 'Creating profile...' : 'Register Profile'}
+                {authLoading ? 'Creating Profile...' : 'Register Profile'}
               </button>
             </form>
           ) : (
             /* LOGIN FORM */
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Email Address</label>
+                <label className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Email Address</label>
                 <input 
                   type="email" 
                   required
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   placeholder="e.g. rahul@family.com"
-                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold transition-all"
+                  className="w-full px-4 py-3 bg-[#080b15]/90 border border-white/10 focus:border-emerald-400 text-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/20 font-medium transition-all"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 font-mono">Password</label>
+                <label className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400">Password</label>
                 <input 
                   type="password" 
                   required
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 bg-[#080a11] border border-white/5 focus:border-emerald-500 text-slate-100 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold font-mono transition-all"
+                  className="w-full px-4 py-3 bg-[#080b15]/90 border border-white/10 focus:border-emerald-400 text-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/20 font-medium font-mono transition-all"
                 />
               </div>
 
               <button 
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/20 cursor-pointer transition disabled:opacity-50"
+                className="w-full py-3.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-2xl text-xs uppercase tracking-wider font-mono shadow-lg shadow-emerald-500/25 cursor-pointer transition-all disabled:opacity-50 mt-2"
               >
-                {authLoading ? 'Verifying credentials...' : 'Access Vault'}
+                {authLoading ? 'Verifying Credentials...' : 'Access Vault'}
               </button>
             </form>
           )}
 
           {/* Mode Switcher */}
-          <div className="text-center text-xs relative z-10 pt-2">
+          <div className="text-center text-xs relative z-10 pt-2 border-t border-white/5">
             <button 
               type="button"
               onClick={() => {
                 setIsRegisterMode(!isRegisterMode);
                 setLoginError('');
               }}
-              className="text-emerald-450 hover:text-emerald-350 hover:underline font-bold cursor-pointer bg-transparent border-0 outline-none"
+              className="text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer bg-transparent border-0 outline-none transition-colors"
             >
               {isRegisterMode ? 'Already registered? Log in here' : 'New family member? Onboard profile'}
             </button>
@@ -703,12 +712,13 @@ export default function App() {
   // Loading State
   if (!dbState) {
     return (
-      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center p-6">
-        <div className="text-center space-y-4">
-          <div className="size-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+      <div className="min-h-screen bg-[#05070d] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="text-center space-y-4 relative z-10">
+          <div className="size-14 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto glow-pill" />
           <div>
-            <h3 className="text-white font-bold font-sans text-base">FamilyFunds Loading</h3>
-            <p className="text-slate-500 text-xs mt-1 font-semibold">Retrieving Sharma Family records from MongoDB...</p>
+            <h3 className="text-white font-extrabold font-sans text-lg gradient-text-emerald">FamilyFunds Syncing</h3>
+            <p className="text-slate-400 text-xs mt-1 font-mono">Loading records from MongoDB cluster...</p>
           </div>
         </div>
       </div>
@@ -716,24 +726,28 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-[#05070d] text-slate-100 font-sans flex flex-col lg:flex-row relative">
+      {/* Background Aurora Mesh Glows */}
+      <div className="fixed top-0 left-1/4 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[150px] pointer-events-none animate-aura-glow"></div>
+      <div className="fixed bottom-0 right-1/4 w-[500px] h-[500px] bg-teal-500/5 rounded-full blur-[140px] pointer-events-none"></div>
+
       {/* 1. SIDEBAR Navigation rail (Desktop) */}
-      <aside className={`bg-[#0d101d] text-slate-100 flex-col justify-between shrink-0 border-r border-white/5 hidden lg:flex transition-all duration-300 ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'}`}>
+      <aside className={`bg-[#090c19]/90 text-slate-100 flex-col justify-between shrink-0 border-r border-white/10 backdrop-blur-2xl hidden lg:flex transition-all duration-300 relative z-20 ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'}`}>
         <div className={`p-6 space-y-8 ${sidebarCollapsed ? 'px-3' : ''}`}>
           
           {/* Brand header */}
           <div className={`flex items-center gap-3 justify-between ${sidebarCollapsed ? 'flex-col items-center' : ''}`}>
             <div 
               onClick={() => navigate('/dashboard')} 
-              className="flex items-center gap-3 cursor-pointer hover:opacity-90 transition-opacity"
+              className="flex items-center gap-3 cursor-pointer group"
             >
-              <div className="w-9 h-9 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white shadow-lg flex items-center justify-center font-bold font-mono shrink-0">
+              <div className="w-10 h-10 bg-gradient-to-tr from-emerald-400 via-teal-500 to-amber-400 rounded-xl text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center justify-center font-extrabold font-mono text-xl shrink-0 group-hover:scale-105 transition-transform glow-pill">
                 F
               </div>
               {!sidebarCollapsed && (
                 <div className="transition-opacity duration-200">
-                  <h2 className="font-bold text-lg tracking-tight text-white font-sans">FamilyFunds</h2>
-                  <span className="text-[9px] text-slate-500 font-extrabold tracking-widest uppercase font-mono mt-0.5 block">Sharma family ledger</span>
+                  <h2 className="font-extrabold text-xl tracking-tight text-white font-sans gradient-text-aurora animate-text-shimmer">FamilyFunds</h2>
+                  <span className="text-[9px] text-emerald-400/80 font-mono tracking-widest uppercase font-semibold mt-0.5 block">Ledger Engine</span>
                 </div>
               )}
             </div>
@@ -745,7 +759,7 @@ export default function App() {
                 setSidebarCollapsed(next);
                 localStorage.setItem('sidebar_collapsed', String(next));
               }}
-              className={`p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 hover:border-emerald-500/25 text-slate-400 hover:text-white transition cursor-pointer flex items-center justify-center shrink-0 ${sidebarCollapsed ? 'mt-2 mx-auto' : 'ml-auto'}`}
+              className={`p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-400/30 text-slate-400 hover:text-white transition cursor-pointer flex items-center justify-center shrink-0 ${sidebarCollapsed ? 'mt-2 mx-auto' : 'ml-auto'}`}
               title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
               {sidebarCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
@@ -755,7 +769,7 @@ export default function App() {
           {/* Navigation links */}
           <nav className="space-y-1.5 pt-4">
             {!sidebarCollapsed && (
-              <div className="px-3 py-2 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono mb-2">Main Menu</div>
+              <div className="px-3 py-2 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest mb-1">Navigation</div>
             )}
             {navItems.map(item => {
               const Icon = item.icon;
@@ -766,16 +780,16 @@ export default function App() {
                   type="button"
                   id={`side-nav-${item.id}`}
                   onClick={() => navigate('/' + item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium tracking-wide transition-all cursor-pointer ${
+                  className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-semibold transition-all cursor-pointer ${
                     sidebarCollapsed ? 'justify-center px-0' : ''
                   } ${
                     isActive 
-                      ? 'bg-emerald-950/30 text-emerald-450 border-l-2 border-emerald-500 font-bold shadow-inner' 
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                      ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/10 text-emerald-400 border-l-2 border-emerald-400 font-bold shadow-lg shadow-emerald-500/5' 
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
                   }`}
                   title={sidebarCollapsed ? item.name : undefined}
                 >
-                  <Icon className="size-4.5 shrink-0" />
+                  <Icon className={`size-5 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
                   {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
                 </button>
               );
@@ -784,89 +798,60 @@ export default function App() {
         </div>
 
         {/* Sync panel on footer */}
-        <div className={`p-4 border-t border-white/5 space-y-3.5 bg-[#090b11]/80 transition-all ${sidebarCollapsed ? 'flex flex-col items-center px-2' : ''}`}>
-          <div className={`flex items-center justify-between text-[10px] text-slate-550 font-mono font-bold w-full ${sidebarCollapsed ? 'justify-center' : ''}`}>
+        <div className={`p-5 border-t border-white/10 space-y-3.5 bg-[#060812]/90 backdrop-blur-xl transition-all ${sidebarCollapsed ? 'flex flex-col items-center px-2' : ''}`}>
+          <div className={`flex items-center justify-between text-[10px] text-slate-400 font-mono font-semibold w-full ${sidebarCollapsed ? 'justify-center' : ''}`}>
             <span className="flex items-center gap-1.5" title={sidebarCollapsed ? (isSyncing ? 'Syncing...' : 'MongoDB Connected') : undefined}>
-              <CircleDot className={`size-2.5 ${isSyncing ? 'text-amber-500 animate-ping' : 'text-emerald-505'}`} />
+              <CircleDot className={`size-2.5 ${isSyncing ? 'text-amber-400 animate-ping' : 'text-emerald-400'}`} />
               {!sidebarCollapsed && (isSyncing ? 'Syncing...' : 'MongoDB Connected')}
             </span>
-            {!sidebarCollapsed && <span className="text-slate-600">V3.5</span>}
+            {!sidebarCollapsed && <span className="text-slate-500">v3.5</span>}
           </div>
 
           {/* Active member session info & logout */}
-          <div className={`text-xs text-slate-400 font-semibold border-t border-white/5 pt-2.5 flex items-center justify-between gap-1 w-full ${sidebarCollapsed ? 'justify-center border-t-0 pt-0' : ''}`}>
+          <div className={`text-xs text-slate-300 font-semibold border-t border-white/10 pt-3 flex items-center justify-between gap-1 w-full ${sidebarCollapsed ? 'justify-center border-t-0 pt-0' : ''}`}>
             {!sidebarCollapsed && (
-              <span className="truncate">Logged as: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
+              <span className="truncate">Member: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
             )}
             <button 
               onClick={() => handleLogout(true)}
-              className={`text-rose-400 hover:text-rose-350 cursor-pointer flex items-center gap-0.5 bg-transparent border-0 outline-none p-1.5 rounded transition-colors ${sidebarCollapsed ? 'bg-rose-955/10 hover:bg-rose-955/20 w-10 h-10 justify-center rounded-xl border border-rose-900/10' : ''}`}
+              className={`text-rose-400 hover:text-rose-300 cursor-pointer flex items-center gap-0.5 bg-transparent border-0 outline-none p-1.5 rounded-xl hover:bg-rose-500/10 transition-colors ${sidebarCollapsed ? 'w-10 h-10 justify-center border border-rose-500/20' : ''}`}
               title="Logout Profile"
             >
               <LogOut className="size-4" />
-            </button>
-          </div>
-
-          {/* Reset Triggers */}
-          <div className={`flex flex-col gap-2 w-full ${sidebarCollapsed ? 'items-center border-t border-white/5 pt-2.5' : ''}`}>
-            <button
-              type="button"
-              id="btn-factory-reset"
-              onClick={handleResetSystem}
-              className={`bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 font-bold cursor-pointer flex items-center justify-center ${
-                sidebarCollapsed ? 'w-10 h-10 p-0 text-xs' : 'w-full py-2 text-[10px]'
-              }`}
-              title="Reset Family Default (Irreversible)"
-            >
-              <RotateCcw className={`size-3 ${sidebarCollapsed ? 'size-4' : 'mr-1'}`} />
-              {!sidebarCollapsed && 'Reset Family Default'}
-            </button>
-
-            <button
-              type="button"
-              id="btn-reset-expenses"
-              onClick={handleResetExpensesOnly}
-              className={`bg-white/5 hover:bg-rose-955/20 hover:text-rose-400 text-slate-450 rounded-xl transition border border-white/5 font-bold cursor-pointer flex items-center justify-center ${
-                sidebarCollapsed ? 'w-10 h-10 p-0 text-xs' : 'w-full py-2 text-[10px]'
-              }`}
-              title="Reset Expenses Only (Irreversible)"
-            >
-              <RotateCcw className={`size-3 ${sidebarCollapsed ? 'size-4' : 'mr-1'}`} />
-              {!sidebarCollapsed && 'Reset Expenses Only'}
             </button>
           </div>
         </div>
       </aside>
 
       {/* 2. MOBILE Header with sliding drawer trigger */}
-      <header className="lg:hidden bg-[#090b11] text-white p-4 flex items-center justify-between border-b border-white/5 shrink-0">
+      <header className="lg:hidden bg-[#090c19]/90 backdrop-blur-xl text-white p-4 flex items-center justify-between border-b border-white/10 shrink-0 relative z-30">
         <div 
           onClick={() => navigate('/dashboard')} 
-          className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2.5 cursor-pointer"
         >
-          <div className="size-8 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white flex items-center justify-center font-bold text-xs">
+          <div className="size-9 bg-gradient-to-tr from-emerald-400 via-teal-500 to-amber-400 rounded-xl text-slate-950 flex items-center justify-center font-extrabold text-sm font-mono glow-pill">
             F
           </div>
-          <h2 className="font-bold text-sm tracking-wide text-slate-100">FamilyFunds</h2>
+          <h2 className="font-extrabold text-base tracking-tight text-white font-sans gradient-text-aurora">FamilyFunds</h2>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={fetchState}
             disabled={isSyncing}
-            className={`p-1.5 bg-white/5 hover:bg-white/10 text-slate-355 hover:text-white rounded-lg border border-white/5 transition-all flex items-center justify-center cursor-pointer ${isSyncing ? 'animate-spin opacity-50' : ''}`}
+            className={`p-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-xl border border-white/10 transition-all flex items-center justify-center cursor-pointer ${isSyncing ? 'animate-spin opacity-50' : ''}`}
             title="Refresh"
           >
-            <RefreshCw className="size-3.5" />
+            <RefreshCw className="size-4" />
           </button>
           <button
             onClick={() => {
               navigate('/expenses');
               setTriggerAddExpense(true);
             }}
-            className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-650 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+            className="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 rounded-xl text-xs font-bold font-mono transition flex items-center gap-1 cursor-pointer shadow-lg shadow-emerald-500/20"
           >
-            <Plus className="size-3.5" />
+            <Plus className="size-4" />
             <span>Add</span>
           </button>
           
@@ -874,7 +859,7 @@ export default function App() {
             type="button"
             id="btn-mobile-menu"
             onClick={() => setMobileMenuOpen(true)}
-            className="p-1.5 hover:bg-white/5 rounded-md cursor-pointer flex items-center justify-center text-slate-400 hover:text-white border border-white/5"
+            className="p-2 hover:bg-white/5 rounded-xl cursor-pointer flex items-center justify-center text-slate-300 hover:text-white border border-white/10"
           >
             <Menu className="size-5" />
           </button>
@@ -886,33 +871,33 @@ export default function App() {
         <>
           {/* Backdrop overlay */}
           <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 transition-opacity duration-300 lg:hidden"
+            className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 transition-opacity duration-300 lg:hidden"
             onClick={() => setMobileMenuOpen(false)}
           />
           
           {/* Sliding sidebar panel */}
-          <aside className="fixed inset-y-0 left-0 w-72 bg-[#0d101d] border-r border-white/5 z-55 flex flex-col justify-between shadow-2xl animate-slide-in lg:hidden">
+          <aside className="fixed inset-y-0 left-0 w-72 bg-[#090c19] border-r border-white/10 z-55 flex flex-col justify-between shadow-2xl animate-slide-in lg:hidden backdrop-blur-2xl">
             <div className="p-5 space-y-6">
               
               {/* Drawer header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="size-8 bg-gradient-to-tr from-emerald-500 to-teal-650 rounded-lg text-white flex items-center justify-center font-bold text-xs">
+                  <div className="size-9 bg-gradient-to-tr from-emerald-400 via-teal-500 to-amber-400 rounded-xl text-slate-950 flex items-center justify-center font-extrabold text-sm font-mono glow-pill">
                     F
                   </div>
-                  <h2 className="font-bold text-sm tracking-wide text-slate-100 font-sans">FamilyFunds</h2>
+                  <h2 className="font-extrabold text-base tracking-wide text-white font-sans gradient-text-aurora">FamilyFunds</h2>
                 </div>
                 <button 
                   type="button" 
                   onClick={() => setMobileMenuOpen(false)}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg cursor-pointer"
+                  className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl cursor-pointer"
                 >
                   <X className="size-5" />
                 </button>
               </div>
 
               {/* Navigation list */}
-              <nav className="space-y-1">
+              <nav className="space-y-1.5">
                 {navItems.map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
@@ -925,13 +910,13 @@ export default function App() {
                         navigate('/' + item.id);
                         setMobileMenuOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                      className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all cursor-pointer ${
                         isActive 
-                          ? 'bg-emerald-950/30 text-emerald-450 border-l-2 border-emerald-500 font-bold' 
+                          ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/10 text-emerald-400 border-l-2 border-emerald-400 font-bold' 
                           : 'text-slate-400 hover:text-white hover:bg-white/5'
                       }`}
                     >
-                      <Icon className="size-4.5" />
+                      <Icon className={`size-5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
                       {item.name}
                     </button>
                   );
@@ -940,51 +925,26 @@ export default function App() {
             </div>
 
             {/* Sync & account controls on bottom */}
-            <div className="p-5 border-t border-white/5 space-y-3.5 bg-[#090b11]/80">
-              <div className="flex justify-between items-center text-[10px] text-slate-500 font-semibold font-mono">
+            <div className="p-5 border-t border-white/10 space-y-3.5 bg-[#060812]">
+              <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold font-mono">
                 <span className="flex items-center gap-1.5">
-                  <CircleDot className={`size-2.5 ${isSyncing ? 'text-amber-500 animate-ping' : 'text-emerald-505'}`} />
+                  <CircleDot className={`size-2.5 ${isSyncing ? 'text-amber-400 animate-ping' : 'text-emerald-400'}`} />
                   {isSyncing ? 'Syncing...' : 'Connected'}
                 </span>
-                <span>V3.5</span>
+                <span>v3.5</span>
               </div>
               
-              <div className="text-xs text-slate-400 font-medium border-t border-white/5 pt-2.5 flex items-center justify-between gap-1">
-                <span className="truncate">Logged as: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
+              <div className="text-xs text-slate-300 font-semibold border-t border-white/10 pt-3 flex items-center justify-between gap-1">
+                <span className="truncate">Member: <b className="text-emerald-400 font-bold">{currentUser?.name}</b></span>
                 <button 
                   onClick={() => {
                     setMobileMenuOpen(false);
                     handleLogout(true);
                   }}
-                  className="text-rose-400 hover:text-rose-350 p-1 flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none"
+                  className="text-rose-400 hover:text-rose-300 p-1 flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none"
                   title="Logout Profile"
                 >
                   <LogOut className="size-4" />
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-2 pt-1.5">
-                <button
-                  type="button"
-                  id="btn-mobile-reset"
-                  onClick={() => {
-                    handleResetSystem();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full py-2.5 bg-white/5 hover:bg-rose-955/20 hover:text-rose-455 text-slate-450 rounded-xl text-xs font-bold cursor-pointer transition border border-white/5"
-                >
-                  Reset Database default
-                </button>
-                <button
-                  type="button"
-                  id="btn-mobile-reset-expenses"
-                  onClick={() => {
-                    handleResetExpensesOnly();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full py-2.5 bg-white/5 hover:bg-rose-955/20 hover:text-rose-455 text-slate-450 rounded-xl text-xs font-bold cursor-pointer transition border border-white/5"
-                >
-                  Reset Expenses Only
                 </button>
               </div>
             </div>
@@ -993,32 +953,32 @@ export default function App() {
       )}
 
       {/* 3. MAIN Panel display canvas */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
         {/* Sleek Top Header Bar (Desktop & Tablet) */}
-        <header className="hidden lg:flex items-center justify-between px-8 py-5 border-b border-white/5 bg-[#090b11]/80 backdrop-blur-md shrink-0">
+        <header className="hidden lg:flex items-center justify-between px-8 py-5 border-b border-white/10 bg-[#090c19]/70 backdrop-blur-2xl shrink-0">
           <div>
-            <h1 className="text-xl font-bold text-white capitalize tracking-tight font-sans">
+            <h1 className="text-2xl font-extrabold text-white capitalize tracking-tight font-sans">
               {activeTab === 'expenses' ? 'Family Ledger' : activeTab === 'settlement' ? 'Settlement Engine' : activeTab === 'family' ? 'Family & Groups' : activeTab}
             </h1>
-            <p className="text-xs text-slate-500 font-medium">Manage and review your family ledger operations</p>
+            <p className="text-xs text-slate-400 font-medium">Manage and review your family ledger operations</p>
           </div>
           <div className="flex items-center gap-4">
             <button
               onClick={fetchState}
               disabled={isSyncing}
-              className={`p-2 bg-white/5 hover:bg-white/10 text-slate-355 hover:text-white rounded-xl border border-white/5 transition-all flex items-center justify-center cursor-pointer ${isSyncing ? 'animate-spin opacity-50' : ''}`}
+              className={`p-2.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-2xl border border-white/10 transition-all flex items-center justify-center cursor-pointer ${isSyncing ? 'animate-spin opacity-50' : ''}`}
               title="Refresh database data"
             >
               <RefreshCw className="size-4" />
             </button>
             <button
               onClick={() => {
-                navigateToTab('expenses');
+                navigate('/expenses');
                 setTriggerAddExpense(true);
               }}
-              className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-650 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950/20 flex items-center gap-1.5 cursor-pointer"
+              className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-2xl text-xs uppercase tracking-wider font-mono shadow-lg shadow-emerald-500/25 flex items-center gap-2 cursor-pointer transition-all hover:scale-[1.02]"
             >
-              <Plus className="size-4" />
+              <Plus className="size-4 stroke-[3]" />
               <span>Log Expense</span>
             </button>
           </div>
