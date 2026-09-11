@@ -65,15 +65,15 @@ export default function ExpensesView({
 }: ExpensesViewProps) {
   const { expenses, users, groups } = state;
 
+  const location = useLocation();
+
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedPaidBy, setSelectedPaidBy] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(() => location.state?.initialCategory || '');
+  const [selectedPaidBy, setSelectedPaidBy] = useState(() => location.state?.initialPaidBy || '');
+  const [selectedGroup, setSelectedGroup] = useState(() => location.state?.initialGroup || '');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-
-  const location = useLocation();
 
   // Selected Month Billing Period Filter
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
@@ -84,12 +84,21 @@ export default function ExpensesView({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  // Keep filter in sync if location state changes
+  // Keep filters in sync if location state changes
   useEffect(() => {
-    if (location.state?.initialMonth) {
+    if (location.state?.initialCategory !== undefined) {
+      setSelectedCategory(location.state.initialCategory);
+    }
+    if (location.state?.initialGroup !== undefined) {
+      setSelectedGroup(location.state.initialGroup);
+    }
+    if (location.state?.initialPaidBy !== undefined) {
+      setSelectedPaidBy(location.state.initialPaidBy);
+    }
+    if (location.state?.initialMonth !== undefined) {
       setSelectedMonth(location.state.initialMonth);
     }
-  }, [location.state?.initialMonth]);
+  }, [location.state]);
 
   // Calculate unique months available for dropdown options
   const monthOptions = useMemo(() => {

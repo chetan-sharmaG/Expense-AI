@@ -12,6 +12,7 @@ import FamilyView from './components/FamilyView';
 import AdvisorView from './components/AdvisorView';
 import AnalysisView from './components/AnalysisView';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   BarChart3, 
   Receipt, 
@@ -986,86 +987,100 @@ export default function App() {
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full custom-scrollbar">
           
-          <Routes>
-            <Route 
-              path="/" 
-              element={<Navigate to="/dashboard" replace />} 
-            />
-            <Route 
-              path="/dashboard" 
-              element={
-                <DashboardView 
-                  state={dbState} 
-                  onNavigate={(id, stateData) => navigate(`/${id}`, { state: stateData })} 
-                />
-              } 
-            />
-            <Route 
-              path="/analysis" 
-              element={
-                <AnalysisView 
-                  state={dbState} 
-                />
-              } 
-            />
-            <Route 
-              path="/expenses" 
-              element={
-                <ExpensesView 
-                  state={dbState}
-                  currentUser={currentUser}
-                  onAddExpense={handleAddExpense}
-                  onEditExpense={handleEditExpense}
-                  onDeleteExpense={handleDeleteExpense}
-                  onTriggerOcr={handleTriggerOcr}
-                  isSyncing={isSyncing}
-                  triggerAddExpense={triggerAddExpense}
-                  onTriggerAddExpenseProcessed={() => setTriggerAddExpense(false)}
-                />
-              } 
-            />
-            <Route 
-              path="/settlement" 
-              element={
-                <SettlementView 
-                  state={dbState}
-                  onAddSettlement={handleAddSettlement}
-                  onMarkSettleCompleted={handleMarkSettleCompleted}
-                  onDeleteSettlement={handleDeleteSettlement}
-                  isSyncing={isSyncing}
-                />
-              } 
-            />
-            <Route 
-              path="/family" 
-              element={
-                <FamilyView 
-                  state={dbState}
-                  onAddGroup={handleAddGroup}
-                  onDeleteGroup={handleDeleteGroup}
-                  onUpdateGroupBudget={handleUpdateGroupBudget}
-                  onAddUser={handleAddUser}
-                  onDeleteUser={handleDeleteUser}
-                  onUpdateUser={handleUpdateUser}
-                  isSyncing={isSyncing}
-                />
-              } 
-            />
-            <Route 
-              path="/advisor" 
-              element={
-                <AdvisorView 
-                  state={dbState}
-                  onSendAdvisor={handleSendAdvisor}
-                  onClearAdvisor={handleClearAdvisor}
-                />
-              } 
-            />
-            <Route 
-              path="*" 
-              element={<Navigate to="/dashboard" replace />} 
-            />
-          </Routes>
+          <AnimatePresence mode="wait">
+            <Routes location={location} key={location.pathname}>
+              <Route 
+                path="/" 
+                element={<Navigate to="/dashboard" replace />} 
+              />
+              <Route 
+                path="/dashboard" 
+                element={
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                    <DashboardView 
+                      state={dbState} 
+                      onNavigate={(id, stateData) => navigate(`/${id}`, { state: stateData })} 
+                    />
+                  </motion.div>
+                } 
+              />
+              <Route 
+                path="/analysis" 
+                element={
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                    <AnalysisView 
+                      state={dbState} 
+                    />
+                  </motion.div>
+                } 
+              />
+              <Route 
+                path="/expenses" 
+                element={
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                    <ExpensesView 
+                      state={dbState}
+                      currentUser={currentUser}
+                      onAddExpense={handleAddExpense}
+                      onEditExpense={handleEditExpense}
+                      onDeleteExpense={handleDeleteExpense}
+                      onTriggerOcr={handleTriggerOcr}
+                      isSyncing={isSyncing}
+                      triggerAddExpense={triggerAddExpense}
+                      onTriggerAddExpenseProcessed={() => setTriggerAddExpense(false)}
+                    />
+                  </motion.div>
+                } 
+              />
+              <Route 
+                path="/settlement" 
+                element={
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                    <SettlementView 
+                      state={dbState}
+                      onAddSettlement={handleAddSettlement}
+                      onMarkSettleCompleted={handleMarkSettleCompleted}
+                      onDeleteSettlement={handleDeleteSettlement}
+                      isSyncing={isSyncing}
+                    />
+                  </motion.div>
+                } 
+              />
+              <Route 
+                path="/family" 
+                element={
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                    <FamilyView 
+                      state={dbState}
+                      onAddGroup={handleAddGroup}
+                      onDeleteGroup={handleDeleteGroup}
+                      onUpdateGroupBudget={handleUpdateGroupBudget}
+                      onAddUser={handleAddUser}
+                      onDeleteUser={handleDeleteUser}
+                      onUpdateUser={handleUpdateUser}
+                      isSyncing={isSyncing}
+                    />
+                  </motion.div>
+                } 
+              />
+              <Route 
+                path="/advisor" 
+                element={
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                    <AdvisorView 
+                      state={dbState}
+                      onSendAdvisor={handleSendAdvisor}
+                      onClearAdvisor={handleClearAdvisor}
+                    />
+                  </motion.div>
+                } 
+              />
+              <Route 
+                path="*" 
+                element={<Navigate to="/dashboard" replace />} 
+              />
+            </Routes>
+          </AnimatePresence>
 
         </main>
       </div>

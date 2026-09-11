@@ -6,6 +6,8 @@
 import React, { useState, useMemo } from 'react';
 import { DBState, Group, Settlement, User } from '../types';
 import { calculateGroupSettlements, ProposedSettlement } from '../utils/settlementHelper';
+import AnimatedCounter from './AnimatedCounter';
+import { fireSettlementConfetti } from '../utils/confetti';
 import { 
   Calculator, 
   ArrowRight, 
@@ -205,7 +207,7 @@ export default function SettlementView({
           <div className="flex items-center justify-between">
             <h3 className="text-white font-extrabold font-sans text-base">Ledger Balance Sheet</h3>
             <span className="text-xs text-slate-400 font-medium">
-              Total Pool spending: <b className="font-mono text-emerald-400 font-extrabold text-sm ml-1">₹{totalFamilySpend.toLocaleString('en-IN')}</b>
+              Total Pool spending: <AnimatedCounter value={totalFamilySpend} className="font-mono text-emerald-400 font-extrabold text-sm ml-1" />
             </span>
           </div>
 
@@ -501,7 +503,10 @@ export default function SettlementView({
                             type="button"
                             id={`btn-settle-${set.id}`}
                             disabled={isSyncing}
-                            onClick={() => onMarkSettleCompleted(set.id)}
+                            onClick={() => {
+                              fireSettlementConfetti();
+                              onMarkSettleCompleted(set.id);
+                            }}
                             className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-bold font-mono cursor-pointer transition-all disabled:opacity-50"
                           >
                             Mark Paid
@@ -547,7 +552,10 @@ export default function SettlementView({
                             type="button"
                             id={`btn-settle-prev-${set.id}`}
                             disabled={isSyncing}
-                            onClick={() => onMarkSettleCompleted(set.id)}
+                            onClick={() => {
+                              fireSettlementConfetti();
+                              onMarkSettleCompleted(set.id);
+                            }}
                             className="px-3 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-[10px] font-bold font-mono cursor-pointer transition-all disabled:opacity-50"
                           >
                             Mark Paid

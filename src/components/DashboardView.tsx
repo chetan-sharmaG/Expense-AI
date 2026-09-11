@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { DBState } from '../types';
+import AnimatedCounter from './AnimatedCounter';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -84,6 +85,7 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
         .filter(exp => exp.paidBy === u.id)
         .reduce((sum, exp) => sum + exp.amount, 0);
       return {
+        id: u.id,
         name: u.name,
         amount: uSpent
       };
@@ -156,7 +158,9 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
           </div>
           <div>
             <p className="text-slate-400 text-xs font-mono uppercase tracking-wider font-semibold">Active Month Spending</p>
-            <h3 className="text-3xl font-extrabold font-mono text-white mt-1 tracking-tight">₹{monthlyTotal.toLocaleString('en-IN')}</h3>
+            <h3 className="text-3xl font-extrabold font-mono text-white mt-1 tracking-tight">
+              <AnimatedCounter value={monthlyTotal} />
+            </h3>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-2 font-mono">
               <TrendingUp className="size-3 text-emerald-400" /> Active Billing Month
             </span>
@@ -171,7 +175,9 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
           </div>
           <div>
             <p className="text-slate-400 text-xs font-mono uppercase tracking-wider font-semibold">All-Time Family Spend</p>
-            <h3 className="text-3xl font-extrabold font-mono text-white mt-1 tracking-tight">₹{totalSpend.toLocaleString('en-IN')}</h3>
+            <h3 className="text-3xl font-extrabold font-mono text-white mt-1 tracking-tight">
+              <AnimatedCounter value={totalSpend} />
+            </h3>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20 mt-2 font-mono">
               Cumulative Total Across Groups
             </span>
@@ -243,13 +249,18 @@ export default function DashboardView({ state, onNavigate }: DashboardViewProps)
               userSpendData.map((user) => {
                 const percentage = filteredTotalSpend > 0 ? (user.amount / filteredTotalSpend) * 100 : 0;
                 return (
-                  <div key={user.name} className="py-3 flex items-center justify-between gap-4">
+                  <div 
+                    key={user.name} 
+                    onClick={() => onNavigate('expenses', { initialPaidBy: user.id, initialMonth: selectedMonthFilter })}
+                    className="py-3 flex items-center justify-between gap-4 cursor-pointer hover:bg-white/5 px-2 rounded-2xl transition-all border border-transparent hover:border-white/10 group"
+                    title={`Click to view ${user.name}'s transactions in ledger`}
+                  >
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="size-9 rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/10 flex items-center justify-center font-extrabold text-emerald-400 text-sm border border-emerald-500/20 font-mono">
                         {user.name[0]}
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-slate-100">{user.name}</h4>
+                        <h4 className="text-sm font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">{user.name}</h4>
                         <span className="text-[10px] text-slate-400 font-semibold font-mono">Contributor</span>
                       </div>
                     </div>

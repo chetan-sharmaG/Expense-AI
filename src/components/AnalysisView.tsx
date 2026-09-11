@@ -4,7 +4,9 @@
  */
 
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DBState } from '../types';
+import AnimatedCounter from './AnimatedCounter';
 import { 
   TrendingUp, 
   PieChart as PieIcon, 
@@ -12,7 +14,10 @@ import {
   Activity,
   Maximize2,
   Calendar,
-  X
+  X,
+  Flame,
+  Zap,
+  LineChart as LineIcon
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -25,7 +30,10 @@ import {
   YAxis, 
   Tooltip, 
   AreaChart, 
-  Area
+  Area,
+  LineChart,
+  Line,
+  Legend
 } from 'recharts';
 
 interface AnalysisViewProps {
@@ -41,10 +49,13 @@ const COLORS = [
   '#d97706', // Amber 600
   '#34d399', // Emerald 400
   '#14b8a6', // Teal 500
+  '#fbbf24', // Amber 400
+  '#10b981',
 ];
 
 export default function AnalysisView({ state }: AnalysisViewProps) {
   const { expenses, groups } = state;
+  const navigate = useNavigate();
 
   // 1. Total Spend
   const totalSpend = useMemo(() => {
@@ -58,6 +69,7 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
         .filter(exp => exp.groupId === g.id)
         .reduce((sum, exp) => sum + exp.amount, 0);
       return {
+        id: g.id,
         name: g.name.split(' (')[0], // Trim subtexts for charts
         amount: gSpent,
         percentage: totalSpend > 0 ? Math.round((gSpent / totalSpend) * 100) : 0
@@ -131,6 +143,148 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
     });
   }, [expenses, last5Months]);
 
+  // 5. Category vs Time Stacked Area Chart (Last 6 Months)
+  const last6Months = useMemo(() => {
+    const months = [];
+    const today = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const key = `${year}-${month}`;
+      const label = d.toLocaleString('default', { month: 'short' });
+      months.push({ key, label });
+    }
+    return months;
+  }, []);
+
+  // Top 5 categories overall
+  const topCategories = useMemo(() => {
+    const map: Record<string, number> = {};
+    expenses.forEach(e => {
+      map[e.category] = (map[e.category] || 0) + e.amount;
+    });
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([cat]) => cat);
+  }, [expenses]);
+
+  const stackedCategoryTrendData = useMemo(() => {
+    return last6Months.map(({ key, label }) => {
+      const monthExpenses = expenses.filter(exp => exp.date && exp.date.startsWith(key));
+      const row: Record<string, any> = { month: label };
+      
+      topCategories.forEach(cat => {
+        const catAmount = monthExpenses
+          .filter(e => e.category === cat)
+          .reduce((sum, e) => sum + e.amount, 0);
+        row[cat] = catAmount;
+      });
+
+      // Group remaining categories into 'Other'
+      const otherAmount = monthExpenses
+        .filter(e => !topCategories.includes(e.category))
+        .reduce((sum, e) => sum + e.amount, 0);
+      row['Other'] = otherAmount;
+
+      return row;
+    });
+  }, [expenses, last6Months, topCategories]);
+
+  // 6. Budget Burn-Down / Daily Spend Pace Spline (Active Month)
+  const burnDownData = useMemo(() => {
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayDate = now.getDate();
+
+    // Total monthly budget target (sum of group budgets)
+    const totalGroupBudget = groups.reduce((sum, g) => sum + (g.monthlyBudget || 0), 0) || 50000;
+
+    const monthExpenses = expenses.filter(e => e.date && e.date.startsWith(currentMonthKey));
+
+    const result = [];
+    let runningSpend = 0;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = `${currentMonthKey}-${String(day).padStart(2, '0')}`;
+      const dayTotal = monthExpenses
+        .filter(e => e.date === dayStr)
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      if (day <= todayDate) {
+        runningSpend += dayTotal;
+      }
+
+      const targetPace = Math.round((day / daysInMonth) * totalGroupBudget);
+
+      result.push({
+        day: `Day ${day}`,
+        dayNum: day,
+        actual: day <= todayDate ? runningSpend : null,
+        targetPace: targetPace
+      });
+    }
+
+    return {
+      data: result,
+      totalBudget: totalGroupBudget,
+      currentSpend: runningSpend,
+      todayDate
+    };
+  }, [expenses, groups]);
+
+  // 7. Day-of-Week Heatmap & Splurge Analysis
+  const dayOfWeekData = useMemo(() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayTotals = [0, 0, 0, 0, 0, 0, 0];
+    const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+
+    filteredExpensesForAllocation.forEach(exp => {
+      if (exp.date) {
+        const d = new Date(exp.date);
+        if (!isNaN(d.getTime())) {
+          const dayIdx = d.getDay();
+          dayTotals[dayIdx] += exp.amount;
+          dayCounts[dayIdx] += 1;
+        }
+      }
+    });
+
+    const maxTotal = Math.max(...dayTotals, 1);
+    const totalAll = dayTotals.reduce((a, b) => a + b, 0);
+
+    return days.map((dayName, idx) => {
+      const amount = dayTotals[idx];
+      const count = dayCounts[idx];
+      const percentage = totalAll > 0 ? Math.round((amount / totalAll) * 100) : 0;
+      const intensity = Math.round((amount / maxTotal) * 100);
+      return {
+        dayName,
+        dayIdx: idx,
+        amount,
+        count,
+        percentage,
+        intensity,
+        isWeekend: idx === 0 || idx === 6
+      };
+    });
+  }, [filteredExpensesForAllocation]);
+
+  // Find Peak Splurge Day
+  const peakSplurgeDay = useMemo(() => {
+    let maxItem = dayOfWeekData[0];
+    dayOfWeekData.forEach(item => {
+      if (item.amount > maxItem.amount) {
+        maxItem = item;
+      }
+    });
+    return maxItem;
+  }, [dayOfWeekData]);
+
   // All months trend data for popup
   const allAvailableMonths = useMemo(() => {
     if (expenses.length === 0) {
@@ -147,7 +301,6 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
       return months;
     }
 
-    // Find earliest expense date in expenses
     let earliestDate = new Date();
     expenses.forEach(exp => {
       if (exp.date) {
@@ -194,6 +347,24 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
     return splurgeTrendAllMonths.length > 0 ? Math.round(totalAllTimeSpend / splurgeTrendAllMonths.length) : 0;
   }, [splurgeTrendAllMonths, totalAllTimeSpend]);
 
+  // Click handlers to navigate to ledger with filters
+  const handleCategoryClick = (categoryName: string) => {
+    navigate('/expenses', {
+      state: {
+        initialCategory: categoryName,
+        initialMonth: selectedAllocationMonth
+      }
+    });
+  };
+
+  const handleGroupClick = (groupId: string) => {
+    navigate('/expenses', {
+      state: {
+        initialGroup: groupId
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Visual Analytics Title Banner */}
@@ -203,8 +374,14 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
             <Activity className="size-6 text-emerald-400" /> Spending Visual Analysis
           </h1>
           <p className="text-slate-300 text-xs mt-1.5 font-medium">
-            Track monthly cumulative spend trends, category budget shares, and sub-group contributions.
+            Track monthly cumulative spend trends, category allocation stacks, daily spending pace, and weekday splurge heatmaps.
           </p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0 relative z-10">
+          <div className="bg-[#080b15] border border-white/10 px-4 py-2 rounded-2xl text-right">
+            <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block">Total Tracked Spend</span>
+            <AnimatedCounter value={totalSpend} className="text-lg font-extrabold text-emerald-400 font-mono" />
+          </div>
         </div>
       </div>
 
@@ -260,7 +437,7 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
           <div className="flex items-start justify-between">
             <div className="min-w-0 pr-2">
               <h3 className="text-white font-extrabold font-sans text-lg">Category Allocation</h3>
-              <p className="text-slate-400 text-xs font-medium">Percentage distribution of family finances</p>
+              <p className="text-slate-400 text-xs font-medium">Click category to filter in ledger</p>
             </div>
             <select
               value={selectedAllocationMonth}
@@ -294,6 +471,8 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
                     outerRadius={82}
                     paddingAngle={4}
                     dataKey="value"
+                    onClick={(entry) => handleCategoryClick(entry.name)}
+                    className="cursor-pointer"
                   >
                     {categorySpendData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -316,15 +495,195 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
             )}
           </div>
 
+          {/* Clickable category badges list */}
           <div className="grid grid-cols-2 gap-2 text-xs overflow-y-auto max-h-36 pr-1 custom-scrollbar">
             {categorySpendData.slice(0, 6).map((entry, idx) => (
-              <div key={entry.name} className="flex items-center gap-2 truncate">
+              <div 
+                key={entry.name} 
+                onClick={() => handleCategoryClick(entry.name)}
+                className="flex items-center gap-2 truncate cursor-pointer hover:bg-white/5 p-1.5 rounded-xl transition-all border border-transparent hover:border-white/10 group"
+                title={`Click to view ${entry.name} in ledger`}
+              >
                 <span className="size-3 rounded-full shrink-0 glow-pill" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                <span className="text-slate-200 truncate font-semibold">{entry.name}</span>
+                <span className="text-slate-200 truncate font-semibold group-hover:text-emerald-400 transition-colors">{entry.name}</span>
                 <span className="text-emerald-400/90 font-mono font-bold text-[10px] shrink-0">({entry.percentage}%)</span>
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ---------------- NEW CHART 1: Category vs Time Stacked Area Chart ---------------- */}
+      <div className="glass-card p-7 rounded-3xl min-w-0 space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-extrabold font-sans text-lg">Category Evolution Over Time</h3>
+            <p className="text-slate-400 text-xs font-medium">Stacked monthly spending trends across top family categories (Last 6 Months)</p>
+          </div>
+          <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+            <LineIcon className="size-5" />
+          </div>
+        </div>
+
+        <div className="h-64 sm:h-80 w-full">
+          {expenses.length === 0 ? (
+            <p className="text-slate-500 text-center py-20 text-sm font-medium">No category trend history recorded.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={stackedCategoryTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <XAxis dataKey="month" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} formatter={(v: any) => `₹${v.toLocaleString('en-IN')}`} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#090c19', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                  formatter={(value: any, name: any) => [`₹${Number(value).toLocaleString('en-IN')}`, name]}
+                />
+                <Legend 
+                  wrapperStyle={{ paddingTop: '10px', fontSize: '11px', color: '#94a3b8' }}
+                  onClick={(e: any) => {
+                    if (e && e.dataKey && e.dataKey !== 'Other') {
+                      handleCategoryClick(e.dataKey);
+                    }
+                  }}
+                />
+                {[...topCategories, 'Other'].map((cat, idx) => (
+                  <Area
+                    key={cat}
+                    type="monotone"
+                    dataKey={cat}
+                    stackId="1"
+                    stroke={COLORS[idx % COLORS.length]}
+                    fill={COLORS[idx % COLORS.length]}
+                    fillOpacity={0.7}
+                    name={cat}
+                  />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* ---------------- NEW CHART 2: Budget Burn-Down / Spending Pace Spline ---------------- */}
+      <div className="glass-card p-7 rounded-3xl min-w-0 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-white font-extrabold font-sans text-lg">Budget Pace & Cumulative Burn-Up</h3>
+            <p className="text-slate-400 text-xs font-medium">Tracking actual daily cumulative spend vs. linear target pace limit for this month</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="bg-[#080b15] border border-white/10 px-3 py-1.5 rounded-xl text-right">
+              <span className="text-[9px] text-slate-400 font-mono font-bold uppercase block">Target Limit</span>
+              <AnimatedCounter value={burnDownData.totalBudget} className="text-xs font-extrabold text-white font-mono" />
+            </div>
+            <div className="bg-[#080b15] border border-white/10 px-3 py-1.5 rounded-xl text-right">
+              <span className="text-[9px] text-slate-400 font-mono font-bold uppercase block">Current Month Spend</span>
+              <AnimatedCounter 
+                value={burnDownData.currentSpend} 
+                className={`text-xs font-extrabold font-mono ${burnDownData.currentSpend > burnDownData.totalBudget ? 'text-rose-400' : 'text-emerald-400'}`} 
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="h-64 sm:h-72 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={burnDownData.data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <XAxis dataKey="day" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} formatter={(v: any) => `₹${v.toLocaleString('en-IN')}`} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#090c19', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                formatter={(v: any, name: any) => [v !== null ? `₹${Number(v).toLocaleString('en-IN')}` : 'N/A', name === 'actual' ? 'Actual Spend' : 'Target Budget Pace']}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="targetPace" 
+                stroke="#64748b" 
+                strokeWidth={2} 
+                strokeDasharray="5 5" 
+                dot={false} 
+                name="Target Pace" 
+              />
+              <Line 
+                type="monotone" 
+                dataKey="actual" 
+                stroke="#10b981" 
+                strokeWidth={3} 
+                dot={{ r: 3, fill: '#10b981' }} 
+                name="Actual Spend" 
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ---------------- NEW CHART 3: Day-of-Week Splurge Heatmap & Matrix ---------------- */}
+      <div className="glass-card p-7 rounded-3xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-white font-extrabold font-sans text-lg flex items-center gap-2">
+              <Flame className="size-5 text-amber-400" /> Day-of-Week Splurge Heatmap
+            </h3>
+            <p className="text-slate-400 text-xs font-medium">Analyzing daily spending intensity across Sunday to Saturday</p>
+          </div>
+
+          {peakSplurgeDay && peakSplurgeDay.amount > 0 && (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400 text-xs font-mono font-bold shrink-0">
+              <Zap className="size-4 text-amber-400 animate-bounce" />
+              <span>Peak Splurge: <b>{peakSplurgeDay.dayName}</b> (₹{peakSplurgeDay.amount.toLocaleString('en-IN')})</span>
+            </div>
+          )}
+        </div>
+
+        {/* Heatmap Grid Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          {dayOfWeekData.map((d) => {
+            const isPeak = peakSplurgeDay && peakSplurgeDay.dayName === d.dayName && d.amount > 0;
+            return (
+              <div 
+                key={d.dayName}
+                className={`glass-panel p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 relative overflow-hidden ${
+                  isPeak 
+                    ? 'border-amber-500/40 bg-amber-500/5 shadow-lg shadow-amber-500/10' 
+                    : 'border-white/5 hover:border-emerald-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-bold font-mono ${d.isWeekend ? 'text-amber-400' : 'text-slate-300'}`}>
+                    {d.dayName}
+                  </span>
+                  {isPeak && (
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-md font-mono font-extrabold uppercase">
+                      Peak
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="text-base font-extrabold font-mono text-white tracking-tight">
+                    ₹{d.amount.toLocaleString('en-IN')}
+                  </h4>
+                  <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                    {d.count} transaction{d.count === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                {/* Heatmap Intensity Meter */}
+                <div className="space-y-1">
+                  <div className="w-full bg-[#080b15] rounded-full h-2 border border-white/5 overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        isPeak ? 'bg-gradient-to-r from-amber-400 to-amber-500' : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                      }`}
+                      style={{ width: `${d.intensity}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-slate-400 font-mono font-bold block text-right">
+                    {d.percentage}% of total
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -333,7 +692,7 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-white font-extrabold font-sans text-lg">Group Contribution & Spend Comparison</h3>
-            <p className="text-slate-400 text-xs font-medium">Total volume mapped across family sub-groups (e.g. couples, parents)</p>
+            <p className="text-slate-400 text-xs font-medium">Total volume mapped across family sub-groups. Click bar to filter ledger.</p>
           </div>
           <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
             <Layers className="size-5" />
@@ -352,7 +711,13 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
                   contentStyle={{ backgroundColor: '#090c19', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
                   formatter={(v) => `₹${v.toLocaleString('en-IN')}`} 
                 />
-                <Bar dataKey="amount" radius={[10, 10, 0, 0]} name="Spent">
+                <Bar 
+                  dataKey="amount" 
+                  radius={[10, 10, 0, 0]} 
+                  name="Spent"
+                  onClick={(entry) => handleGroupClick(entry.id)}
+                  className="cursor-pointer"
+                >
                   {groupSpendData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
@@ -389,9 +754,14 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
               : 0;
 
             return (
-              <div key={grp.id} className="glass-panel p-5 rounded-2xl border border-white/5 space-y-3.5 flex flex-col justify-between">
+              <div 
+                key={grp.id} 
+                onClick={() => handleGroupClick(grp.id)}
+                className="glass-panel p-5 rounded-2xl border border-white/5 space-y-3.5 flex flex-col justify-between cursor-pointer hover:border-emerald-500/30 transition-all group"
+                title="Click to view group expenses in ledger"
+              >
                 <div className="flex items-center justify-between">
-                  <span className="text-base font-bold text-slate-100">{grp.name.split(' (')[0]}</span>
+                  <span className="text-base font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">{grp.name.split(' (')[0]}</span>
                   {grp.monthlyBudget && grp.monthlyBudget > 0 ? (
                     <span className="text-xs bg-[#090c19] border border-white/10 text-slate-300 px-3 py-1 rounded-xl font-mono font-bold">
                       Limit: ₹{grp.monthlyBudget.toLocaleString('en-IN')}
@@ -468,11 +838,11 @@ export default function AnalysisView({ state }: AnalysisViewProps) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 shrink-0">
               <div className="glass-panel p-4 rounded-2xl border border-white/5">
                 <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block">Total Spent (All-Time)</span>
-                <span className="text-lg font-extrabold text-white font-mono mt-1 block">₹{totalAllTimeSpend.toLocaleString('en-IN')}</span>
+                <AnimatedCounter value={totalAllTimeSpend} className="text-lg font-extrabold text-white font-mono mt-1 block" />
               </div>
               <div className="glass-panel p-4 rounded-2xl border border-white/5">
                 <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block">Average Monthly Spend</span>
-                <span className="text-lg font-extrabold text-emerald-400 font-mono mt-1 block">₹{avgMonthlySpend.toLocaleString('en-IN')}</span>
+                <AnimatedCounter value={avgMonthlySpend} className="text-lg font-extrabold text-emerald-400 font-mono mt-1 block" />
               </div>
               <div className="glass-panel p-4 rounded-2xl border border-white/5">
                 <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider block">Tracked Months</span>
