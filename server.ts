@@ -583,19 +583,14 @@ app.post('/api/ocr', authenticateJWT, async (req, res) => {
       Analyze text, merchant details, payment confirmation, bank accounts numbers or reference IDs, and transaction amount very carefully.
       
       Look for payment confirmation status. Try to guess the appropriate category from standard options:
-      - Food
-      - Groceries
-      - Vegetables
-      - Fuel
-      - Medical
-      - Entertainment
-      - Travel
-      - Shopping
+      - Outside Food
+      - Veggies
+      - Fruits
+      - DMART
       - Bills
-      - Education
-      - Rent
-      - Investments
-      - Miscellaneous
+      - Mislenious
+      - Milk
+      - Dining
       
       Return ONLY a raw JSON structure matching these properties:
       {
@@ -915,19 +910,14 @@ async function runOcrOnReceipt(base64Image: string): Promise<{ amount: number; m
           Check if there is any message, note, remark, payment reason, or custom message written on the payment screenshot (for example: "for coffee", "lent", "rent share") and extract it in the "notes" field if present.
           
           Look for payment confirmation status. Try to guess the appropriate category from standard options:
-          - Food
-          - Groceries
-          - Vegetables
-          - Fuel
-          - Medical
-          - Entertainment
-          - Travel
-          - Shopping
+          - Outside Food
+          - Veggies
+          - Fruits
+          - DMART
           - Bills
-          - Education
-          - Rent
-          - Investments
-          - Miscellaneous
+          - Mislenious
+          - Milk
+          - Dining
           
           Return ONLY a raw JSON structure matching these properties:
           {
@@ -1017,19 +1007,14 @@ async function parseExpenseWithAi(
   const groupsString = groupsList.map(g => `Group ID: ${g.id}, Name: ${g.name}`).join('\n');
   const usersString = usersList.map(u => `User Name: ${u.name}, ID: ${u.id}, Group: ${u.groupId}`).join('\n');
   const categoriesList = [
-    'Food',
-    'Groceries',
-    'Vegetables',
-    'Fuel',
-    'Medical',
-    'Entertainment',
-    'Travel',
-    'Shopping',
+    'Outside Food',
+    'Veggies',
+    'Fruits',
+    'DMART',
     'Bills',
-    'Education',
-    'Rent',
-    'Investments',
-    'Miscellaneous'
+    'Mislenious',
+    'Milk',
+    'Dining'
   ];
 
   const userGroup = senderUser ? groupsList.find(g => g.id === senderUser.groupId) : null;

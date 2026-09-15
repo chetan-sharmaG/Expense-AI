@@ -37,19 +37,14 @@ interface ExpensesViewProps {
 }
 
 const CATEGORIES = [
-  'Food',
-  'Groceries',
-  'Vegetables',
-  'Fuel',
-  'Medical',
-  'Entertainment',
-  'Travel',
-  'Shopping',
+  'Outside Food',
+  'Veggies',
+  'Fruits',
+  'DMART',
   'Bills',
-  'Education',
-  'Rent',
-  'Investments',
-  'Miscellaneous'
+  'Mislenious',
+  'Milk',
+  'Dining'
 ];
 
 export default function ExpensesView({ 
@@ -155,9 +150,15 @@ export default function ExpensesView({
   const [showFiltersMobile, setShowFiltersMobile] = useState(false);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
 
+  // Combine predefined categories with any existing past categories in DB for filters
+  const filterCategories = useMemo(() => {
+    const pastCats = expenses.map(e => e.category).filter(Boolean);
+    return Array.from(new Set([...CATEGORIES, ...pastCats]));
+  }, [expenses]);
+
   // Form states
   const [formAmount, setFormAmount] = useState('');
-  const [formCategory, setFormCategory] = useState('Groceries');
+  const [formCategory, setFormCategory] = useState('Outside Food');
   const [formPaidBy, setFormPaidBy] = useState(users[0]?.id || '');
   const [formMerchant, setFormMerchant] = useState('');
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
@@ -171,7 +172,7 @@ export default function ExpensesView({
   // Reset Form
   const resetForm = () => {
     setFormAmount('');
-    setFormCategory('Groceries');
+    setFormCategory('Outside Food');
     setFormPaidBy(users[0]?.id || '');
     setFormMerchant('');
     setFormDate(new Date().toISOString().split('T')[0]);
@@ -273,7 +274,9 @@ export default function ExpensesView({
           if (date) setFormDate(date);
           if (category) {
             // Find matched or category from array or fallback
-            const matched = CATEGORIES.find(c => c.toLowerCase() === category.toLowerCase()) || 'Others';
+            const matched = CATEGORIES.find(c => c.toLowerCase() === category.toLowerCase())
+              || filterCategories.find(c => c.toLowerCase() === category.toLowerCase())
+              || 'Mislenious';
             setFormCategory(matched);
           }
           if (notes) setFormNotes(notes);
@@ -394,7 +397,7 @@ export default function ExpensesView({
                 className="w-full px-3 py-2.5 text-xs bg-[#080b15] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-400 font-medium text-slate-200 cursor-pointer"
               >
                 <option value="">Categories (All)</option>
-                {CATEGORIES.map(cat => (
+                {filterCategories.map(cat => (
                   <option key={cat} value={cat} className="bg-[#0c0f1d] text-white">{cat}</option>
                 ))}
               </select>
@@ -1041,7 +1044,7 @@ export default function ExpensesView({
                       disabled={isSyncing}
                       className="w-full px-4 py-3 bg-[#080b15] border border-white/10 rounded-2xl focus:outline-none focus:border-emerald-400 font-medium text-slate-200 text-sm disabled:opacity-50 cursor-pointer"
                     >
-                      {CATEGORIES.map(cat => (
+                      {Array.from(new Set([...CATEGORIES, formCategory].filter(Boolean))).map(cat => (
                         <option key={cat} value={cat} className="bg-[#0c0f1d] text-white">{cat}</option>
                       ))}
                     </select>
