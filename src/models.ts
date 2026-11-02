@@ -201,3 +201,53 @@ const ProcessedMessageSchema = new Schema<IProcessedMessage>({
   createdAt: { type: Date, required: true, default: Date.now }
 });
 export const ProcessedMessageModel = getModel<IProcessedMessage>('ProcessedMessage', ProcessedMessageSchema);
+
+// 10. Push Subscription Schema
+export interface IPushSubscription extends Document {
+  id: string;
+  userId: string;
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  createdAt: string;
+  userAgent?: string;
+}
+
+const PushSubscriptionSchema = new Schema<IPushSubscription>({
+  id:        { type: String, required: true, unique: true },
+  userId:    { type: String, required: true },
+  endpoint:  { type: String, required: true, unique: true },
+  keys: {
+    p256dh:  { type: String, required: true },
+    auth:    { type: String, required: true }
+  },
+  createdAt: { type: String, required: true },
+  userAgent: { type: String }
+});
+export const PushSubscriptionModel = getModel<IPushSubscription>('PushSubscription', PushSubscriptionSchema);
+
+// 11. In-App Notification Schema
+export interface INotification extends Document {
+  id: string;
+  userId: string; // specific user ID or 'all'
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+  actionUrl?: string;
+}
+
+const NotificationSchema = new Schema<INotification>({
+  id:        { type: String, required: true, unique: true },
+  userId:    { type: String, required: true },
+  title:     { type: String, required: true },
+  message:   { type: String, required: true },
+  type:      { type: String, default: 'reminder' },
+  read:      { type: Boolean, default: false },
+  createdAt: { type: String, required: true },
+  actionUrl: { type: String, default: '/expenses?action=add' }
+});
+export const NotificationModel = getModel<INotification>('Notification', NotificationSchema);

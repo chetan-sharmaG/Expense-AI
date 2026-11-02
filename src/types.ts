@@ -58,12 +58,24 @@ export interface AdvisorMessage {
   timestamp: string;
 }
 
+export interface NotificationItem {
+  id: string;
+  userId: string; // specific user ID or 'all'
+  title: string;
+  message: string;
+  type: 'reminder' | 'settlement' | 'alert' | 'system';
+  read: boolean;
+  createdAt: string;
+  actionUrl?: string;
+}
+
 export interface DBState {
   family: Family;
   groups: Group[];
   users: User[];
   expenses: Expense[];
   settlements: Settlement[];
+  notifications?: NotificationItem[];
   whatsappChat: {
     id: string;
     sender: 'user' | 'bot';

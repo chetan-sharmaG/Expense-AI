@@ -18,8 +18,8 @@ Secure, database-driven family onboarding and member coordination:
 
 A unified ledger representing family expenditures with responsive styling:
 - **Receipt Lightbox Viewer**: View uploaded transaction screenshots and GPay/Paytm invoices in full screen with a blurred glass overlay.
-- **Dynamic Category Allocation**: Expenses are categorized using an expanded checklist:
-  `Food`, `Groceries`, `Vegetables`, `Fuel`, `Medical`, `Entertainment`, `Travel`, `Shopping`, `Bills`, `Education`, `Rent`, `Investments`, `Miscellaneous`.
+- **Standard Category Taxonomy**: Expenses follow 8 standardized categories:
+  `Outside Food`, `Veggies`, `Fruits`, `DMART`, `Bills`, `Mislenious`, `Milk`, `Dining` (with legacy categories retained for past records).
 - **Advanced Filtering Drawer**: Slice expense lists by date range, category, paid member, and owning couple group. Collapses into a slide-out menu on mobile.
 - **Write Prevention Spinner**: Input components, delete buttons, and edit actions disable dynamically with visual loading spinners during write operations to prevent duplicate API requests.
 
@@ -84,7 +84,14 @@ Log transactions directly from actual WhatsApp chats using the Meta Cloud API:
 
 ## ⏰ 8. Budget Reminders & Cron Job Scheduling
 
-Automation triggers that keep the family budget up to date:
-- **Vercel Cron Trigger**: Configured to run daily at 7:30 PM IST (14:00 UTC) via `vercel.json` and a public `/api/cron/reminders` endpoint.
-- **Timezone-Aligned Scanners**: Local clocks query `Asia/Kolkata` time targets every 30 seconds to maintain compliance.
-- **Activity Reminders**: Analyzes today's database logs. If a couple group hasn't recorded any expenses today, the bot dispatches a friendly warning reminder to their linked numbers.
+Automation triggers that keep the family ledger up to date without requiring manual checks:
+- **Bi-Monthly Automated Cron Jobs**: Configured via `node-cron` aligned to `Asia/Kolkata` timezone:
+  - **15th of Every Month at 09:00 AM**: Dispatches the mid-month ledger check-in reminder to all family members to review receipts for the first half of the month.
+  - **Last Day of Every Month at 09:00 AM**: Detects the last calendar day (28th-31st) and dispatches the month-end ledger wrap-up reminder before settlements are calculated.
+- **Web Push Notifications (Service Worker + VAPID)**: Native device push pop-up alerts delivered directly to Windows Action Center, macOS notification banners, and Android lock screens even when the browser tab is closed.
+- **Interactive Notification Center (In-App)**:
+  - Header Bell icon with animated unread badge counter.
+  - Slide-out glassmorphic notification drawer with 1-click **"➕ Log Expense"** quick action that opens the modal with the logged-in user selected.
+  - Push status toggle to easily enable native device notifications.
+- **Custom Test Route (`POST /api/notifications/test-cron`)**:
+  - Dedicated endpoint to immediately trigger a broadcast push notification and in-app alert to all active users on-demand for instant testing without waiting for the 15th.

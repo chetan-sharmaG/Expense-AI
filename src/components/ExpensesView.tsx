@@ -36,7 +36,7 @@ interface ExpensesViewProps {
   onTriggerAddExpenseProcessed?: () => void;
 }
 
-const CATEGORIES = [
+export const CATEGORIES = [
   'Outside Food',
   'Veggies',
   'Fruits',
@@ -46,6 +46,52 @@ const CATEGORIES = [
   'Milk',
   'Dining'
 ];
+
+export function normalizeCategory(category?: string | null): string {
+  if (!category) return 'Mislenious';
+  const clean = category.trim().toLowerCase();
+
+  // 1. Direct standard matches
+  for (const cat of CATEGORIES) {
+    if (cat.toLowerCase() === clean) return cat;
+  }
+
+  // 2. Synonyms & legacy mappings:
+  // DMART
+  if (['groceries', 'grocery', 'dmart', 'd-mart', 'supermarket', 'kirana', 'provisions', 'household', 'shopping', 'amazon', 'flipkart', 'staples', 'blinkit', 'zepto', 'instamart', 'bigbasket', 'ration'].some(k => clean.includes(k))) {
+    return 'DMART';
+  }
+  // Veggies
+  if (['vegetable', 'vegetables', 'veggie', 'veggies', 'sabzi', 'sabji', 'greens', 'bhaji'].some(k => clean.includes(k))) {
+    return 'Veggies';
+  }
+  // Fruits
+  if (['fruit', 'fruits'].some(k => clean.includes(k))) {
+    return 'Fruits';
+  }
+  // Milk
+  if (['milk', 'dairy', 'curd', 'paneer', 'butter', 'ghee', 'doodh', 'amul'].some(k => clean.includes(k))) {
+    return 'Milk';
+  }
+  // Dining
+  if (['dining', 'dining out', 'restaurant', 'cafe', 'bistro', 'hotel', 'eatery', 'buffet'].some(k => clean.includes(k))) {
+    return 'Dining';
+  }
+  // Outside Food
+  if (['outside food', 'fast food', 'street food', 'swiggy', 'zomato', 'takeaway', 'snack', 'snacks', 'food', 'tea', 'coffee', 'chai', 'bakery'].some(k => clean.includes(k))) {
+    return 'Outside Food';
+  }
+  // Bills
+  if (['bill', 'bills', 'utilit', 'electric', 'power', 'water', 'gas', 'lpg', 'wifi', 'internet', 'broadband', 'recharge', 'maintenance', 'rent', 'subscription', 'insurance', 'emi', 'tax'].some(k => clean.includes(k))) {
+    return 'Bills';
+  }
+  // Mislenious / Miscellaneous / Medical / Fuel / Transport / Others
+  if (['misc', 'other', 'general', 'medical', 'medicine', 'pharmacy', 'health', 'fuel', 'petrol', 'diesel', 'travel', 'transport', 'cab', 'auto', 'uber', 'ola', 'entertainment', 'movie', 'education', 'invest'].some(k => clean.includes(k))) {
+    return 'Mislenious';
+  }
+
+  return 'Mislenious';
+}
 
 export default function ExpensesView({ 
   state, 
@@ -150,20 +196,40 @@ export default function ExpensesView({
   const [showFiltersMobile, setShowFiltersMobile] = useState(false);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
 
-  // Combine predefined categories with any existing past categories in DB for filters
+  // Combine predefined standard categories with distinct legacy categories in DB for filters
   const filterCategories = useMemo(() => {
     const pastCats = expenses.map(e => e.category).filter(Boolean);
-    return Array.from(new Set([...CATEGORIES, ...pastCats]));
+    const legacyCats: string[] = [];
+
+    for (const cat of pastCats) {
+      const isStandard = CATEGORIES.some(c => c.toLowerCase() === cat.toLowerCase());
+      const isMiscVariant = ['miscellaneous', 'mislenious', 'misc'].includes(cat.toLowerCase());
+      if (!isStandard && !isMiscVariant && !legacyCats.includes(cat)) {
+        legacyCats.push(cat);
+      }
+    }
+
+    return {
+      standard: CATEGORIES,
+      legacy: legacyCats.sort()
+    };
   }, [expenses]);
 
-  // Form states
+  // Form states - default paidBy is the logged-in user
   const [formAmount, setFormAmount] = useState('');
   const [formCategory, setFormCategory] = useState('Outside Food');
-  const [formPaidBy, setFormPaidBy] = useState(users[0]?.id || '');
+  const [formPaidBy, setFormPaidBy] = useState(() => currentUser?.id || users[0]?.id || '');
   const [formMerchant, setFormMerchant] = useState('');
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
   const [formNotes, setFormNotes] = useState('');
   const [formImage, setFormImage] = useState<string | null>(null);
+
+  // Sync formPaidBy whenever logged-in currentUser becomes available or changes (unless in edit mode)
+  useEffect(() => {
+    if (currentUser?.id && !isEditOpen) {
+      setFormPaidBy(currentUser.id);
+    }
+  }, [currentUser?.id, isEditOpen]);
 
   // OCR Loading state
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -173,7 +239,7 @@ export default function ExpensesView({
   const resetForm = () => {
     setFormAmount('');
     setFormCategory('Outside Food');
-    setFormPaidBy(users[0]?.id || '');
+    setFormPaidBy(currentUser?.id || users[0]?.id || '');
     setFormMerchant('');
     setFormDate(new Date().toISOString().split('T')[0]);
     setFormNotes('');
@@ -184,6 +250,9 @@ export default function ExpensesView({
   // Open Create
   const handleOpenCreate = () => {
     resetForm();
+    if (currentUser?.id) {
+      setFormPaidBy(currentUser.id);
+    }
     setIsCreateOpen(true);
   };
 
@@ -273,10 +342,8 @@ export default function ExpensesView({
           if (merchant) setFormMerchant(merchant);
           if (date) setFormDate(date);
           if (category) {
-            // Find matched or category from array or fallback
-            const matched = CATEGORIES.find(c => c.toLowerCase() === category.toLowerCase())
-              || filterCategories.find(c => c.toLowerCase() === category.toLowerCase())
-              || 'Mislenious';
+            // Normalize OCR category to standard canonical categories
+            const matched = normalizeCategory(category);
             setFormCategory(matched);
           }
           if (notes) setFormNotes(notes);
@@ -304,7 +371,15 @@ export default function ExpensesView({
         exp.category.toLowerCase().includes(searchTerm.toLowerCase());
       
       // 2. Category filter
-      const matchesCategory = !selectedCategory || exp.category === selectedCategory;
+      const matchesCategory = (() => {
+        if (!selectedCategory) return true;
+        const sel = selectedCategory.toLowerCase();
+        const expCat = (exp.category || '').toLowerCase();
+        if (sel === 'mislenious' || sel === 'miscellaneous') {
+          return expCat === 'mislenious' || expCat === 'miscellaneous' || expCat === 'misc';
+        }
+        return expCat === sel;
+      })();
 
       // 3. User paid filter
       const matchesUser = !selectedPaidBy || exp.paidBy === selectedPaidBy;
@@ -397,9 +472,18 @@ export default function ExpensesView({
                 className="w-full px-3 py-2.5 text-xs bg-[#080b15] border border-white/10 rounded-xl focus:outline-none focus:border-emerald-400 font-medium text-slate-200 cursor-pointer"
               >
                 <option value="">Categories (All)</option>
-                {filterCategories.map(cat => (
-                  <option key={cat} value={cat} className="bg-[#0c0f1d] text-white">{cat}</option>
-                ))}
+                <optgroup label="Standard Categories" className="bg-[#0c0f1d] text-emerald-400 font-bold">
+                  {filterCategories.standard.map(cat => (
+                    <option key={cat} value={cat} className="bg-[#0c0f1d] text-white font-normal">{cat}</option>
+                  ))}
+                </optgroup>
+                {filterCategories.legacy.length > 0 && (
+                  <optgroup label="Past / Legacy Categories" className="bg-[#0c0f1d] text-slate-400 font-bold">
+                    {filterCategories.legacy.map(cat => (
+                      <option key={cat} value={cat} className="bg-[#0c0f1d] text-slate-300 font-normal">{cat} (Legacy)</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 
@@ -911,8 +995,11 @@ export default function ExpensesView({
                     >
                       {users.map(u => {
                         const userGrp = groups.find(g => g.id === u.groupId);
+                        const isYou = currentUser?.id === u.id;
                         return (
-                          <option key={u.id} value={u.id} className="bg-[#0c0f1d] text-white">{u.name} ({userGrp ? userGrp.name.split(' (')[0] : 'No Group'})</option>
+                          <option key={u.id} value={u.id} className="bg-[#0c0f1d] text-white">
+                            {u.name}{isYou ? ' • (You)' : ''} ({userGrp ? userGrp.name.split(' (')[0] : 'No Group'})
+                          </option>
                         );
                       })}
                     </select>
@@ -1059,9 +1146,14 @@ export default function ExpensesView({
                       disabled={isSyncing}
                       className="w-full px-4 py-3 bg-[#080b15] border border-white/10 rounded-2xl focus:outline-none focus:border-emerald-400 font-bold text-slate-200 text-sm disabled:opacity-50 cursor-pointer"
                     >
-                      {users.map(u => (
-                        <option key={u.id} value={u.id} className="bg-[#0c0f1d] text-white">{u.name}</option>
-                      ))}
+                      {users.map(u => {
+                        const isYou = currentUser?.id === u.id;
+                        return (
+                          <option key={u.id} value={u.id} className="bg-[#0c0f1d] text-white">
+                            {u.name}{isYou ? ' • (You)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 

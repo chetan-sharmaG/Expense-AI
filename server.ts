@@ -17,6 +17,8 @@ import { GoogleGenAI, Type } from '@google/genai';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import webpush from 'web-push';
+import cron from 'node-cron';
 import {
   FamilyModel,
   GroupModel,
@@ -26,16 +28,33 @@ import {
   WhatsAppChatModel,
   AdvisorChatModel,
   WhatsAppSessionModel,
-  ProcessedMessageModel
+  ProcessedMessageModel,
+  PushSubscriptionModel,
+  NotificationModel
 } from './src/models';
 
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'family_funds_development_jwt_secret_token_key_123!';
 
+// Serve static assets from public/ (including sw.js and manifest.json)
+app.use(express.static(path.join(process.cwd(), 'public')));
+
 // Set up larger limits for base64 uploads (receipt screenshots)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// ------------------- WEB PUSH & VAPID SETUP -------------------
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BJlvnnGBn3rW4arLFz18XEPLRwJBjMC8CLnyiBqXghGWR9JHu2RBe22Fqt5WABY9IV9bk80zYVabygYAKsDJGKQ';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'p325TPq1D7ciUYjPK1Ka7rLJ6Q2IS6f7C90c4-P-fYc';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:support@familyfunds.app';
+
+try {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  console.log('[WebPush] VAPID details configured successfully.');
+} catch (err: any) {
+  console.error('[WebPush] Failed to set VAPID details:', err.message || err);
+}
 
 // ------------------- JWT MIDDLEWARE -------------------
 function authenticateJWT(req: any, res: any, next: any) {
@@ -56,14 +75,15 @@ function authenticateJWT(req: any, res: any, next: any) {
 
 // ------------------- DATABASE STATE FETCH HELPER -------------------
 async function getDBState(userId?: string) {
-  const [family, groups, users, expenses, settlements, whatsappChat, advisorChat] = await Promise.all([
+  const [family, groups, users, expenses, settlements, whatsappChat, advisorChat, notifications] = await Promise.all([
     FamilyModel.findOne().lean(),
     GroupModel.find().lean(),
     UserModel.find({}, { password: 0 }).lean(), // Exclude passwords from UI payload
     ExpenseModel.find().lean(),
     SettlementModel.find().lean(),
     WhatsAppChatModel.find().lean(),
-    userId ? AdvisorChatModel.find({ userId }).sort({ timestamp: 1 }).lean() : []
+    userId ? AdvisorChatModel.find({ userId }).sort({ timestamp: 1 }).lean() : [],
+    userId ? NotificationModel.find({ $or: [{ userId }, { userId: 'all' }] }).sort({ createdAt: -1 }).limit(30).lean() : []
   ]);
 
   return {
@@ -72,9 +92,194 @@ async function getDBState(userId?: string) {
     users,
     expenses,
     settlements,
+    notifications: notifications || [],
     whatsappChat,
     advisorChat
   };
+}
+
+// ------------------- STANDARD CATEGORIES & NORMALIZATION -------------------
+export const STANDARD_CATEGORIES = [
+  'Outside Food',
+  'Veggies',
+  'Fruits',
+  'DMART',
+  'Bills',
+  'Mislenious',
+  'Milk',
+  'Dining'
+];
+
+export function normalizeCategory(category?: string | null): string {
+  if (!category) return 'Mislenious';
+  const clean = category.trim().toLowerCase();
+
+  // 1. Direct standard matches
+  for (const cat of STANDARD_CATEGORIES) {
+    if (cat.toLowerCase() === clean) return cat;
+  }
+
+  // 2. Synonyms & legacy mappings:
+  // DMART
+  if (['groceries', 'grocery', 'dmart', 'd-mart', 'supermarket', 'kirana', 'provisions', 'household', 'shopping', 'amazon', 'flipkart', 'staples', 'blinkit', 'zepto', 'instamart', 'bigbasket', 'ration'].some(k => clean.includes(k))) {
+    return 'DMART';
+  }
+  // Veggies
+  if (['vegetable', 'vegetables', 'veggie', 'veggies', 'sabzi', 'sabji', 'greens', 'bhaji'].some(k => clean.includes(k))) {
+    return 'Veggies';
+  }
+  // Fruits
+  if (['fruit', 'fruits'].some(k => clean.includes(k))) {
+    return 'Fruits';
+  }
+  // Milk
+  if (['milk', 'dairy', 'curd', 'paneer', 'butter', 'ghee', 'doodh', 'amul'].some(k => clean.includes(k))) {
+    return 'Milk';
+  }
+  // Dining
+  if (['dining', 'dining out', 'restaurant', 'cafe', 'bistro', 'hotel', 'eatery', 'buffet'].some(k => clean.includes(k))) {
+    return 'Dining';
+  }
+  // Outside Food
+  if (['outside food', 'fast food', 'street food', 'swiggy', 'zomato', 'takeaway', 'snack', 'snacks', 'food', 'tea', 'coffee', 'chai', 'bakery'].some(k => clean.includes(k))) {
+    return 'Outside Food';
+  }
+  // Bills
+  if (['bill', 'bills', 'utilit', 'electric', 'power', 'water', 'gas', 'lpg', 'wifi', 'internet', 'broadband', 'recharge', 'maintenance', 'rent', 'subscription', 'insurance', 'emi', 'tax'].some(k => clean.includes(k))) {
+    return 'Bills';
+  }
+  // Mislenious / Miscellaneous / Medical / Fuel / Transport / Others
+  if (['misc', 'other', 'general', 'medical', 'medicine', 'pharmacy', 'health', 'fuel', 'petrol', 'diesel', 'travel', 'transport', 'cab', 'auto', 'uber', 'ola', 'entertainment', 'movie', 'education', 'invest'].some(k => clean.includes(k))) {
+    return 'Mislenious';
+  }
+
+  return 'Mislenious';
+}
+
+// ------------------- WEB PUSH & NOTIFICATION HELPERS -------------------
+export interface PushPayload {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+}
+
+// Dispatch push notification to a single device subscription
+export async function sendPushToSubscription(subscription: any, payload: PushPayload) {
+  try {
+    const pushConfig = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth
+      }
+    };
+    const stringified = JSON.stringify({
+      title: payload.title,
+      body: payload.body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: payload.tag || 'familyfunds-reminder',
+      data: {
+        url: payload.url || '/expenses?action=add'
+      }
+    });
+    await webpush.sendNotification(pushConfig, stringified);
+    return true;
+  } catch (err: any) {
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      console.log(`[WebPush] Subscription expired or gone (${err.statusCode}). Removing endpoint: ${subscription.endpoint}`);
+      await PushSubscriptionModel.deleteOne({ endpoint: subscription.endpoint }).catch(() => {});
+    } else {
+      console.error('[WebPush] Error sending push notification:', err.message || err);
+    }
+    return false;
+  }
+}
+
+// Broadcast reminder: creates in-app notification for all users + pushes to all subscribed devices
+export async function broadcastLedgerReminder(title: string, message: string, actionUrl: string = '/expenses?action=add') {
+  console.log(`[Notification Engine] Broadcasting reminder: "${title}" - "${message}"`);
+
+  // 1. Create In-App Notification records for all family users
+  const users = await UserModel.find().lean();
+  const notifId = `notif-${Date.now()}`;
+  const createdAt = new Date().toISOString();
+
+  const notificationsToInsert = users.map(u => ({
+    id: `${notifId}-${u.id}`,
+    userId: u.id,
+    title,
+    message,
+    type: 'reminder',
+    read: false,
+    createdAt,
+    actionUrl
+  }));
+
+  if (notificationsToInsert.length > 0) {
+    await NotificationModel.insertMany(notificationsToInsert).catch(err => {
+      console.error('[Notification Engine] Failed to save in-app notifications:', err);
+    });
+  }
+
+  // 2. Fetch all registered Web Push device subscriptions
+  const subscriptions = await PushSubscriptionModel.find().lean();
+  console.log(`[Notification Engine] Found ${subscriptions.length} registered push subscriptions.`);
+
+  let deliveredCount = 0;
+  let failedCount = 0;
+
+  for (const sub of subscriptions) {
+    const ok = await sendPushToSubscription(sub, {
+      title,
+      body: message,
+      url: actionUrl,
+      tag: 'familyfunds-reminder'
+    });
+    if (ok) deliveredCount++;
+    else failedCount++;
+  }
+
+  console.log(`[Notification Engine] Broadcast finished: ${deliveredCount} delivered, ${failedCount} failed.`);
+  return {
+    deliveredCount,
+    failedCount,
+    totalSubscriptions: subscriptions.length,
+    usersCount: users.length
+  };
+}
+
+// ------------------- CRON SCHEDULES (15th & LAST DAY) -------------------
+export function initNotificationCronJobs() {
+  console.log('[Cron] Initializing Ledger Reminder Cron Schedules (Asia/Kolkata timezone)...');
+
+  // 1. Mid-Month Ledger Reminder: Runs at 09:00 AM on the 15th of every month
+  cron.schedule('0 9 15 * *', async () => {
+    console.log('[Cron] Firing Mid-Month Ledger Reminder (15th of the month)...');
+    await broadcastLedgerReminder(
+      '📅 Mid-Month Ledger Check-in',
+      'Friendly mid-month reminder! Make sure to log any pending receipts, grocery bills, or shared expenses for the first half of the month.'
+    );
+  }, { timezone: 'Asia/Kolkata' });
+
+  // 2. Month-End Ledger Reminder: Evaluates daily on 28-31 at 09:00 AM to detect the last day
+  cron.schedule('0 9 28-31 * *', async () => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const isLastDay = tomorrow.getDate() === 1;
+
+    if (isLastDay) {
+      console.log('[Cron] Firing Month-End Ledger Reminder (Last day of the month)...');
+      await broadcastLedgerReminder(
+        '🏁 Month-End Ledger Wrap-up',
+        'The month is ending today! Please record all remaining expenditures and bills before month-end settlements are calculated.'
+      );
+    }
+  }, { timezone: 'Asia/Kolkata' });
+
+  console.log('[Cron] Scheduled reminders active: 15th & Last Day of every month.');
 }
 
 // ------------------- DATABASE SEED LOGIC -------------------
@@ -491,7 +696,7 @@ app.post('/api/expenses', authenticateJWT, async (req: any, res) => {
     const newExpense = await ExpenseModel.create({
       id: `exp-${Date.now()}`,
       amount: Number(amount),
-      category: category || 'Miscellaneous',
+      category: normalizeCategory(category),
       paidBy,
       groupId,
       date,
@@ -531,7 +736,7 @@ app.put('/api/expenses/:id', authenticateJWT, async (req: any, res) => {
 
     await ExpenseModel.updateOne({ id }, {
       amount: amount !== undefined ? Number(amount) : expense.amount,
-      category: category || expense.category,
+      category: category ? normalizeCategory(category) : expense.category,
       paidBy: paidBy || expense.paidBy,
       groupId,
       date: date || expense.date,
@@ -630,6 +835,9 @@ app.post('/api/ocr', authenticateJWT, async (req, res) => {
     });
 
     const parsedData = JSON.parse(response.text || '{}');
+    if (parsedData.category) {
+      parsedData.category = normalizeCategory(parsedData.category);
+    }
     res.json({ success: true, extracted: parsedData });
 
   } catch (error: any) {
@@ -1045,7 +1253,7 @@ ${stats.recentExpenses.map(e => `- Date: ${e.date}, Amount: ₹${e.amount}, Merc
 We currently have a pending expense proposal in the user's active session waiting for their confirmation:
 - Amount: ₹${pending.amount}
 - Merchant: "${pending.merchant || 'Unknown'}"
-- Category: "${pending.category || 'Miscellaneous'}"
+- Category: "${normalizeCategory(pending.category)}"
 - Paid By: "${pendingPayerName}"
 - Date: "${pending.date || today}"
 - Notes: "${pending.notes || ''}"
@@ -1300,7 +1508,7 @@ async function handleIncomingMessageFlow(
       const newExpense = await ExpenseModel.create({
         id: `exp-${Date.now()}`,
         amount: exp.amount,
-        category: exp.category || 'Miscellaneous',
+        category: normalizeCategory(exp.category),
         paidBy: exp.paidBy,
         groupId: exp.groupId,
         date: exp.date,
@@ -1353,7 +1561,7 @@ async function handleIncomingMessageFlow(
       }).sort({ createdAt: -1 });
 
       if (matchedExpense) {
-        matchedCategory = matchedExpense.category;
+        matchedCategory = normalizeCategory(matchedExpense.category);
       }
     }
   }
@@ -1460,7 +1668,7 @@ async function handleIncomingMessageFlow(
           phoneNumber: phoneIdentifier,
           pendingExpense: {
             amount: Number(exp.amount),
-            category: exp.category || 'Miscellaneous',
+            category: normalizeCategory(exp.category),
             paidBy,
             groupId,
             date: exp.date || todayStr,
@@ -1493,7 +1701,7 @@ async function handleIncomingMessageFlow(
       const newExpense = await ExpenseModel.create({
         id: `exp-${Date.now()}`,
         amount: Number(exp.amount),
-        category: exp.category || 'Miscellaneous',
+        category: normalizeCategory(exp.category),
         paidBy,
         groupId,
         date: exp.date || todayStr,
@@ -1507,7 +1715,7 @@ async function handleIncomingMessageFlow(
 
       const payer = user.id === paidBy ? user : (await UserModel.findOne({ id: paidBy })) || user;
       if (traceId) console.log(`[${traceId}] Expense auto-logged (confidence ${parsedResult.confidence}%): ${newExpense.id}`);
-      return `✅ *Expense Logged!* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant}\n🏷️ *Category:* ${exp.category}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n📝 *Notes:* ${exp.notes || 'None'}\n\nLive dashboards updated! 🚀`;
+      return `✅ *Expense Logged!* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant}\n🏷️ *Category:* ${normalizeCategory(exp.category)}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n📝 *Notes:* ${exp.notes || 'None'}\n\nLive dashboards updated! 🚀`;
     } else {
       // Save pending session for confirmation
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -1517,7 +1725,7 @@ async function handleIncomingMessageFlow(
           phoneNumber: phoneIdentifier,
           pendingExpense: {
             amount: Number(exp.amount),
-            category: exp.category || 'Miscellaneous',
+            category: normalizeCategory(exp.category),
             paidBy,
             groupId,
             date: exp.date || todayStr,
@@ -1537,7 +1745,7 @@ async function handleIncomingMessageFlow(
       // If it is a screenshot and no note was found, ask the user if they want to add a note
       if (hasImage && !hasNote) {
         return {
-          text: `🤔 *I detected a screenshot expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n\n*No note was found in the screenshot.* Do you want to add any notes before logging this? Reply with your note text, or click *Confirm & Save* below to log without notes. 🤖`,
+          text: `🤔 *I detected a screenshot expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${normalizeCategory(exp.category)}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n\n*No note was found in the screenshot.* Do you want to add any notes before logging this? Reply with your note text, or click *Confirm & Save* below to log without notes. 🤖`,
           buttons: [
             { id: 'confirm_yes', title: 'Confirm & Save' },
             { id: 'confirm_no', title: 'Cancel' }
@@ -1546,7 +1754,7 @@ async function handleIncomingMessageFlow(
       }
 
       return {
-        text: `🤔 *Please confirm this expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${exp.category || 'Miscellaneous'}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n📝 *Notes:* ${exp.notes || 'None'}`,
+        text: `🤔 *Please confirm this expense proposal:* \n\n💰 *Amount:* ₹${exp.amount}\n🏢 *Merchant:* ${exp.merchant || 'None'}\n🏷️ *Category:* ${normalizeCategory(exp.category)}\n👤 *Paid By:* ${payer.name}\n📅 *Date:* ${exp.date || todayStr}\n📝 *Notes:* ${exp.notes || 'None'}`,
         buttons: [
           { id: 'confirm_yes', title: 'Confirm & Save' },
           { id: 'confirm_no', title: 'Cancel' }
@@ -1580,7 +1788,7 @@ async function handleIncomingMessageFlow(
         phoneNumber: phoneIdentifier,
         pendingExpense: {
           amount: Number(exp.amount),
-          category: exp.category || 'Miscellaneous',
+          category: normalizeCategory(exp.category),
           paidBy,
           groupId,
           date: exp.date || todayStr,
@@ -2057,8 +2265,127 @@ app.delete('/api/settlements/:id', authenticateJWT, async (req: any, res) => {
   }
 });
 
+// ------------------- NOTIFICATIONS & WEB PUSH ROUTES -------------------
+
+// 1. Get VAPID Public Key for client browser subscription
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+// 2. Save/Update Push Subscription
+app.post('/api/push/subscribe', authenticateJWT, async (req: any, res) => {
+  const { subscription, userAgent } = req.body;
+  if (!subscription || !subscription.endpoint || !subscription.keys) {
+    return res.status(400).json({ error: 'Missing subscription credentials' });
+  }
+
+  try {
+    const updated = await PushSubscriptionModel.findOneAndUpdate(
+      { endpoint: subscription.endpoint },
+      {
+        id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        userId: req.user.id,
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
+        createdAt: new Date().toISOString(),
+        userAgent: userAgent || req.headers['user-agent'] || ''
+      },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true, message: 'Device registered for push notifications', subscription: updated });
+  } catch (err: any) {
+    console.error('[Push Subscribe] Error:', err);
+    res.status(500).json({ error: 'Failed to save push subscription', message: err.message });
+  }
+});
+
+// 3. Unsubscribe Device
+app.post('/api/push/unsubscribe', authenticateJWT, async (req: any, res) => {
+  const { endpoint } = req.body;
+  if (!endpoint) return res.status(400).json({ error: 'Missing endpoint' });
+  try {
+    await PushSubscriptionModel.deleteOne({ endpoint });
+    res.json({ success: true, message: 'Unsubscribed successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to unsubscribe', message: err.message });
+  }
+});
+
+// 4. Custom Route to Test Cron Push Notification for All Users (Requested by user)
+app.all('/api/notifications/test-cron', authenticateJWT, async (req: any, res) => {
+  try {
+    const title = req.body?.title || req.query?.title || '📅 Mid-Month Ledger Check-in (Test)';
+    const message = req.body?.message || req.query?.message || 'Friendly ledger check-in! Don\'t forget to log your receipts and expenditures for the month.';
+    const actionUrl = req.body?.actionUrl || '/expenses?action=add';
+
+    const result = await broadcastLedgerReminder(title, message, actionUrl);
+    const state = await getDBState(req.user.id);
+
+    res.json({
+      success: true,
+      message: `Cron push notification broadcast dispatched! Delivered: ${result.deliveredCount}, Failed: ${result.failedCount}, In-App Created: ${result.usersCount}`,
+      stats: result,
+      state
+    });
+  } catch (err: any) {
+    console.error('[Test Cron] Error broadcasting:', err);
+    res.status(500).json({ error: 'Failed to broadcast test cron push notification', message: err.message });
+  }
+});
+
+// 5. Fetch Notifications
+app.get('/api/notifications', authenticateJWT, async (req: any, res) => {
+  try {
+    const list = await NotificationModel.find({
+      $or: [{ userId: req.user.id }, { userId: 'all' }]
+    }).sort({ createdAt: -1 }).limit(40).lean();
+    res.json({ success: true, notifications: list });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch notifications', message: err.message });
+  }
+});
+
+// 6. Mark Single Notification as Read
+app.put('/api/notifications/:id/read', authenticateJWT, async (req: any, res) => {
+  try {
+    await NotificationModel.updateOne({ id: req.params.id }, { read: true });
+    const state = await getDBState(req.user.id);
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to mark notification read', message: err.message });
+  }
+});
+
+// 7. Mark All Notifications as Read
+app.put('/api/notifications/read-all', authenticateJWT, async (req: any, res) => {
+  try {
+    await NotificationModel.updateMany(
+      { $or: [{ userId: req.user.id }, { userId: 'all' }] },
+      { read: true }
+    );
+    const state = await getDBState(req.user.id);
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to mark all as read', message: err.message });
+  }
+});
+
+// 8. Clear/Delete Notification
+app.delete('/api/notifications/:id', authenticateJWT, async (req: any, res) => {
+  try {
+    await NotificationModel.deleteOne({ id: req.params.id });
+    const state = await getDBState(req.user.id);
+    res.json({ success: true, state });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to delete notification', message: err.message });
+  }
+});
+
 // ------------------- VITE & STATIC HANDLING -------------------
 export async function startServer() {
+  // Initialize cron schedules for notifications
+  initNotificationCronJobs();
+
   if (process.env.NODE_ENV !== 'production') {
     // Dynamic import so Vite is never loaded in the serverless/production bundle
     const { createServer: createViteServer } = await import('vite');

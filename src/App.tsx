@@ -11,6 +11,8 @@ import SettlementView from './components/SettlementView';
 import FamilyView from './components/FamilyView';
 import AdvisorView from './components/AdvisorView';
 import AnalysisView from './components/AnalysisView';
+import NotificationCenter from './components/NotificationCenter';
+import { registerServiceWorker } from './utils/pushNotifications';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -132,6 +134,11 @@ export default function App() {
       mainEl.scrollTop = 0;
     }
   }, [location.pathname]);
+
+  // Register Service Worker for Web Push on application startup
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
 
   // Auth Headers helper
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
@@ -837,6 +844,15 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
+          <NotificationCenter
+            notifications={dbState?.notifications || []}
+            authToken={userToken || ''}
+            onRefreshState={fetchState}
+            onTriggerAddExpense={() => {
+              navigate('/expenses');
+              setTriggerAddExpense(true);
+            }}
+          />
           <button
             onClick={fetchState}
             disabled={isSyncing}
@@ -963,7 +979,16 @@ export default function App() {
             </h1>
             <p className="text-xs text-slate-400 font-medium">Manage and review your family ledger operations</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <NotificationCenter
+              notifications={dbState?.notifications || []}
+              authToken={userToken || ''}
+              onRefreshState={fetchState}
+              onTriggerAddExpense={() => {
+                navigate('/expenses');
+                setTriggerAddExpense(true);
+              }}
+            />
             <button
               onClick={fetchState}
               disabled={isSyncing}
