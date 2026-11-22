@@ -1474,26 +1474,29 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<string> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   if (!token) throw new Error('WHATSAPP_ACCESS_TOKEN is not configured');
 
+  console.log(`[WhatsApp Media] Fetching media metadata from Meta Graph API: mediaId=${mediaId}...`);
   const mediaUrlRes = await fetch(`https://graph.facebook.com/v23.0/${mediaId}`, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   if (!mediaUrlRes.ok) {
     const err = await mediaUrlRes.text();
-    throw new Error(`Failed to fetch media metadata: ${err}`);
+    throw new Error(`Failed to fetch media metadata from Meta (status ${mediaUrlRes.status}): ${err}`);
   }
   const mediaData = await mediaUrlRes.json();
   const fileUrl = mediaData.url;
+  console.log(`[WhatsApp Media] Media metadata received: mimeType=${mediaData.mime_type}, size=${mediaData.file_size} bytes`);
 
   const fileRes = await fetch(fileUrl, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   if (!fileRes.ok) {
     const err = await fileRes.text();
-    throw new Error(`Failed to download media file: ${err}`);
+    throw new Error(`Failed to download media file from Meta (status ${fileRes.status}): ${err}`);
   }
 
   const arrayBuffer = await fileRes.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
+  console.log(`[WhatsApp Media] ✅ Successfully downloaded image (${(buffer.length / 1024).toFixed(1)} KB)`);
   return `data:${mediaData.mime_type};base64,${buffer.toString('base64')}`;
 }
 
@@ -1501,10 +1504,11 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) {
-    console.warn('[WhatsApp] WhatsApp tokens or Phone Number ID not configured.');
+    console.warn(`[WhatsApp Outbound] ⚠️ Cannot send message to ${to}: WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID missing! (token=${!!token}, phoneNumberId=${!!phoneNumberId})`);
     return;
   }
 
+  console.log(`[WhatsApp Outbound] Dispatching message to ${to} via phoneId=${phoneNumberId}...`);
   const url = `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`;
   const payload = {
     messaging_product: 'whatsapp',
@@ -1524,9 +1528,10 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error(`[WhatsApp] Failed to send message to ${to}:`, errText);
+    console.error(`[WhatsApp Outbound] ❌ Meta API error (status ${res.status}) sending to ${to}:`, errText);
   } else {
-    console.log(`[WhatsApp] Message successfully sent to ${to}`);
+    const data: any = await res.json().catch(() => ({}));
+    console.log(`[WhatsApp Outbound] ✅ Message successfully sent to ${to}! Message ID: ${data?.messages?.[0]?.id || 'delivered'}`);
   }
 }
 
@@ -1534,7 +1539,7 @@ async function sendWhatsAppInteractiveButtons(to: string, bodyText: string, butt
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) {
-    console.warn('[WhatsApp] WhatsApp tokens or Phone Number ID not configured (Buttons).');
+    console.warn(`[WhatsApp Outbound] ⚠️ Cannot send interactive buttons to ${to}: WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID missing!`);
     return;
   }
 
@@ -1547,6 +1552,7 @@ async function sendWhatsAppInteractiveButtons(to: string, bodyText: string, butt
     }
   }));
 
+  console.log(`[WhatsApp Outbound] Dispatching interactive buttons to ${to} (${actionButtons.length} buttons)...`);
   const url = `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`;
   const payload = {
     messaging_product: 'whatsapp',
@@ -1575,9 +1581,10 @@ async function sendWhatsAppInteractiveButtons(to: string, bodyText: string, butt
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error(`[WhatsApp] Failed to send interactive buttons to ${to}:`, errText);
+    console.error(`[WhatsApp Outbound] ❌ Meta API error (status ${res.status}) sending buttons to ${to}:`, errText);
   } else {
-    console.log(`[WhatsApp] Interactive buttons successfully sent to ${to}`);
+    const data: any = await res.json().catch(() => ({}));
+    console.log(`[WhatsApp Outbound] ✅ Interactive buttons successfully sent to ${to}! Message ID: ${data?.messages?.[0]?.id || 'delivered'}`);
   }
 }
 
@@ -1999,11 +2006,20 @@ app.get('/api/whatsapp/webhook', (req, res) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
+  console.log('\n==============================================================');
+  console.log('🔑 [WHATSAPP WEBHOOK GET VERIFICATION]');
+  console.log(`   hub.mode: "${mode}"`);
+  console.log(`   hub.verify_token received: "${token}"`);
+  console.log(`   expected WHATSAPP_VERIFY_TOKEN: "${verifyToken}"`);
+  console.log(`   hub.challenge: "${challenge}"`);
+
   if (mode === 'subscribe' && token === verifyToken) {
-    console.log('[WhatsApp Webhook] Verification successful.');
+    console.log('   Verification Result: ✅ MATCH! Challenge returned.');
+    console.log('==============================================================\n');
     return res.status(200).send(challenge);
   } else {
-    console.warn('[WhatsApp Webhook] Verification failed.');
+    console.warn(`   Verification Result: ❌ MISMATCH! Expected "${verifyToken}" but got "${token}".`);
+    console.log('==============================================================\n');
     return res.sendStatus(403);
   }
 });
@@ -2013,7 +2029,7 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
   const from = message?.from;
   try {
     if (!from) {
-      console.error(`[${traceId}] Missing message.from in webhook message:`, message);
+      console.error(`[${traceId}] ❌ Missing message.from in webhook payload:`, message);
       return;
     }
     const messageId = message.id;
@@ -2034,16 +2050,25 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
       return;
     }
 
-    console.log(`[${traceId}] Background Processing Started: from=${from}, type=${type}`);
+    console.log(`\n--------------------------------------------------------------`);
+    console.log(`[${traceId}] 🚀 WHATSAPP PROCESSING PIPELINE STARTED`);
+    console.log(`   Sender Phone: "${from}" | Message Type: "${type}" | Message ID: "${messageId}"`);
+    console.log(`   Credentials Check:`);
+    console.log(`     - WHATSAPP_ACCESS_TOKEN: ${process.env.WHATSAPP_ACCESS_TOKEN ? '✅ Configured (' + process.env.WHATSAPP_ACCESS_TOKEN.substring(0, 10) + '...)' : '❌ MISSING'}`);
+    console.log(`     - WHATSAPP_PHONE_NUMBER_ID: ${process.env.WHATSAPP_PHONE_NUMBER_ID ? '✅ Configured (' + process.env.WHATSAPP_PHONE_NUMBER_ID + ')' : '❌ MISSING'}`);
+    console.log(`     - GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? '✅ Configured (' + process.env.GEMINI_API_KEY.substring(0, 10) + '...)' : '❌ MISSING'}`);
+    console.log(`     - GROQ_API_KEY: ${process.env.GROQ_API_KEY ? '✅ Configured (' + process.env.GROQ_API_KEY.substring(0, 10) + '...)' : '❌ MISSING'}`);
 
-    // Count total users in database to inspect connection state
-    const totalUsers = await UserModel.countDocuments();
-    console.log(`[${traceId}] Total users in DB: ${totalUsers}`);
+    // Mark message as read (turns blue ticks on)
+    if (messageId) {
+      console.log(`[${traceId}] Marking message ${messageId} as read (blue ticks)...`);
+      await markMessageAsRead(messageId);
+    }
 
     // Find linked user profile by phone number (robust matching with/without country code)
     const cleanFrom = from.replace(/\D/g, '');
     const last10 = cleanFrom.slice(-10);
-    console.log(`[${traceId}] Before user lookup with number: ${cleanFrom} (last10: ${last10})`);
+    console.log(`[${traceId}] Looking up user with phone: "${cleanFrom}" (last10: "${last10}")...`);
 
     const user = await UserModel.findOne({
       $or: [
@@ -2054,11 +2079,12 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
       ]
     });
 
-    console.log(`[${traceId}] After user lookup. Found user:`, user ? `${user.name} (${user.id})` : 'null');
-
     if (!user) {
-      console.warn(`[${traceId}] NO LINKED USER FOUND for phone number: ${cleanFrom}`);
-      console.log(`[${traceId}] Dispatching Welcome/Unlinked warning reply to ${from}`);
+      const allUsers = await UserModel.find({}, { name: 1, whatsappNumber: 1 });
+      const regList = allUsers.map(u => `${u.name} (${u.whatsappNumber || 'none'})`).join(', ');
+      console.warn(`[${traceId}] ⚠️ NO LINKED USER FOUND for phone number: "${cleanFrom}"`);
+      console.warn(`   Users registered in MongoDB: [${regList}]`);
+      console.log(`[${traceId}] Dispatching Welcome/Unlinked notification to ${from}...`);
       await sendWhatsAppMessage(
         from,
         `⚠️ *Welcome to FamilyFunds!* \n\nYour WhatsApp number is not linked to any member profile in our system. \n\n👉 Please log in to the FamilyFunds app, navigate to the *Family & Groups* settings, and link this phone number (*${from}*) to your profile to enable automatic expense logging! 🚀`
@@ -2066,7 +2092,7 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
       return;
     }
 
-    console.log(`[${traceId}] Found linked user details: ${user.name} (${user.id}), Group: ${user.groupId}`);
+    console.log(`[${traceId}] ✅ User Matched: "${user.name}" (${user.id}), Group: ${user.groupId}`);
 
     // Log the user message to simulator chat history
     await WhatsAppChatModel.create({
@@ -2077,36 +2103,31 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
       timestamp: new Date().toISOString()
     });
 
-    if (messageId) {
-      await markMessageAsRead(messageId);
-    }
-
     // Download image if type is image
     if (type === 'image' && message.image?.id) {
-      console.log(`[${traceId}] Image attachment detected. Media ID: ${message.image.id}`);
-      console.log(`[${traceId}] OCR Started`);
+      console.log(`[${traceId}] 🖼️ Image receipt detected. Media ID: ${message.image.id}`);
       try {
         base64Image = await downloadWhatsAppMedia(message.image.id);
-        console.log(`[${traceId}] OCR Finished. Successfully downloaded image media.`);
+        console.log(`[${traceId}] ✅ Successfully downloaded receipt image from Meta.`);
       } catch (err: any) {
-        console.error(`[${traceId}] OCR Failed: Image download failure:`, err);
-        await sendWhatsAppMessage(from, '❌ Failed to process the uploaded image receipt. Please try sending a plain text description.');
+        console.error(`[${traceId}] ❌ Image download failure:`, err.message || err);
+        await sendWhatsAppMessage(from, '❌ Failed to process the uploaded image receipt. Please try sending a plain text description (e.g. "DMart 1500").');
         return;
       }
     }
 
     // Run unified message flow processor
-    console.log(`[${traceId}] Processing message flow`);
+    console.log(`[${traceId}] 🧠 Running message flow processor (OCR & Intent Parser)...`);
     const replyResult = await handleIncomingMessageFlow(text, base64Image, user, cleanFrom, false, traceId);
 
     const logText = typeof replyResult === 'string' ? replyResult : replyResult.text;
 
     // Send reply via WhatsApp
     if (typeof replyResult === 'object' && replyResult.buttons && replyResult.buttons.length > 0) {
-      console.log(`[${traceId}] Reply Sent. Sending interactive buttons reply to ${from}`);
+      console.log(`[${traceId}] 📤 Sending interactive buttons reply to ${from}...`);
       await sendWhatsAppInteractiveButtons(from, replyResult.text, replyResult.buttons);
     } else {
-      console.log(`[${traceId}] Reply Sent. Sending text reply to ${from}`);
+      console.log(`[${traceId}] 📤 Sending text reply to ${from}...`);
       await sendWhatsAppMessage(from, logText);
     }
 
@@ -2117,9 +2138,10 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
       text: logText,
       timestamp: new Date().toISOString()
     });
-    console.log(`[${traceId}] Bot reply logged.`);
+    console.log(`[${traceId}] 🏁 WhatsApp pipeline completed successfully.`);
+    console.log(`--------------------------------------------------------------\n`);
   } catch (err: any) {
-    console.error(`[${traceId}] PROCESSOR CRASH:`, err);
+    console.error(`[${traceId}] ❌ PROCESSOR CRASH:`, err);
     if (from) {
       try {
         let friendlyError = "⚠️ *FamBudget Error* \n\nAn unexpected error occurred while processing your message. Please try again later.";
@@ -2140,10 +2162,14 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
 // Real WhatsApp Webhook Event Notifications Receiver Endpoint
 app.post('/api/whatsapp/webhook', async (req, res) => {
   const { body } = req;
-  console.log('[WhatsApp Webhook] Received webhook payload:', JSON.stringify(body, null, 2));
+  const timeStr = new Date().toLocaleTimeString('en-IN', { hour12: false });
+  console.log(`\n==============================================================`);
+  console.log(`📲 [WHATSAPP WEBHOOK POST EVENT] ${timeStr}`);
+  console.log(`   Object: ${body?.object}`);
 
-  if (body.object !== 'whatsapp_business_account') {
-    console.log(`[WhatsApp Webhook] Bypassing non-whatsapp_business_account object: ${body.object}`);
+  if (body?.object !== 'whatsapp_business_account') {
+    console.log(`   ⚠️ Bypassing non-whatsapp_business_account object: ${body?.object}`);
+    console.log(`==============================================================\n`);
     return res.status(200).send('EVENT_RECEIVED');
   }
 
@@ -2151,14 +2177,27 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
-    const message = value?.messages?.[0];
+    const statuses = value?.statuses;
+    const messages = value?.messages;
 
+    if (statuses && statuses.length > 0) {
+      const st = statuses[0];
+      console.log(`   ℹ️ Meta Delivery/Read Receipt: msgId=${st.id}, status="${st.status}", recipient=${st.recipient_id}`);
+    }
+
+    const message = messages?.[0];
     if (!message) {
-      console.log('[WhatsApp Webhook] No message object found in webhook payload.');
+      console.log('   ℹ️ No incoming user message in this event (status receipt event).');
+      console.log(`==============================================================\n`);
       return res.status(200).send('EVENT_RECEIVED');
     }
 
     const messageId = message?.id;
+    console.log(`   ✉️ Incoming Message: from="${message.from}", type="${message.type}", id="${messageId}"`);
+    if (message.text?.body) console.log(`   💬 Text Body: "${message.text.body}"`);
+    if (message.image?.id) console.log(`   🖼️ Image Attachment: mediaId="${message.image.id}"`);
+    console.log(`==============================================================\n`);
+
     if (messageId) {
       const existing = await ProcessedMessageModel.findOne({ messageId });
       if (existing) {
@@ -2173,7 +2212,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     }
 
     const traceId = `${messageId || 'msg'}-${Date.now()}`;
-    console.log(`[${traceId}] Received`);
+    console.log(`[${traceId}] Processing message pipeline...`);
 
     // Process synchronously to ensure serverless containers don't freeze before completion
     await processWebhookMessageAsync(message, traceId);
@@ -2181,7 +2220,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     // Return 200 OK
     return res.status(200).send('EVENT_RECEIVED');
   } catch (error: any) {
-    console.error('[WhatsApp Webhook] Fatal error processing event:', error);
+    console.error('[WhatsApp Webhook] ❌ Fatal error processing event:', error);
     res.status(500).send('INTERNAL_SERVER_ERROR');
   }
 });
