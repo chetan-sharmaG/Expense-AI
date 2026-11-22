@@ -859,11 +859,11 @@ app.post('/api/ocr', authenticateJWT, async (req, res) => {
   console.log(`[OCR Diagnostic] Receipt image payload size: ~${imageKb} KB`);
 
   const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey || geminiKey.trim() === '' || geminiKey === 'MY_GEMINI_API_KEY' || !geminiKey.startsWith('AIzaSy')) {
-    console.warn(`[OCR Diagnostic] ⚠️ GEMINI_API_KEY is not a valid Google AI Studio key (starts with AIzaSy). Current key: "${geminiKey ? geminiKey.substring(0, 8) + '...' : 'none'}"`);
+  if (!geminiKey || geminiKey.trim() === '' || geminiKey === 'MY_GEMINI_API_KEY') {
+    console.warn(`[OCR Diagnostic] ⚠️ GEMINI_API_KEY is not configured.`);
     return res.status(400).json({
       error: 'GEMINI_API_KEY_INVALID',
-      message: 'A valid Google AI Studio Gemini API key (starts with "AIzaSy...") is required for receipt OCR. Please generate a free key at https://aistudio.google.com/apikey and set GEMINI_API_KEY in your .env.local file.'
+      message: 'GEMINI_API_KEY is required for receipt OCR. Please set GEMINI_API_KEY in your .env.local file.'
     });
   }
 
@@ -1213,8 +1213,8 @@ async function handleProgrammaticCommand(text: string): Promise<string | null> {
 // Receipt OCR using server-side Gemini
 async function runOcrOnReceipt(base64Image: string): Promise<{ amount: number; merchant: string; date: string; notes?: string } | null> {
   const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey || geminiKey.trim() === '' || geminiKey === 'MY_GEMINI_API_KEY' || !geminiKey.startsWith('AIzaSy')) {
-    console.warn('[OCR Helper] GEMINI_API_KEY is not configured or not a valid Google AI Studio key (starts with AIzaSy).');
+  if (!geminiKey || geminiKey.trim() === '' || geminiKey === 'MY_GEMINI_API_KEY') {
+    console.warn('[OCR Helper] GEMINI_API_KEY is not configured.');
     return null;
   }
 
@@ -1581,7 +1581,7 @@ async function sendWhatsAppInteractiveButtons(to: string, bodyText: string, butt
   }
 }
 
-async function sendTypingIndicator(to: string, messageId: string): Promise<void> {
+async function markMessageAsRead(messageId: string): Promise<void> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
@@ -1599,21 +1599,18 @@ async function sendTypingIndicator(to: string, messageId: string): Promise<void>
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           status: 'read',
-          message_id: messageId,
-          typing_indicator: {
-            type: 'text'
-          }
+          message_id: messageId
         })
       }
     );
     if (!res.ok) {
       const errText = await res.text();
-      console.warn(`[WhatsApp Typing Indicator] API returned non-200 status:`, errText);
+      console.warn(`[WhatsApp Read Receipt] API returned status ${res.status}:`, errText);
     } else {
-      console.log(`[WhatsApp Typing Indicator] Sent successfully to ${to}`);
+      console.log(`[WhatsApp Read Receipt] ✅ Message ${messageId} marked as read.`);
     }
   } catch (err: any) {
-    console.error(`[WhatsApp Typing Indicator] Failed to send:`, err.message);
+    console.error(`[WhatsApp Read Receipt] Failed to send:`, err.message);
   }
 }
 
@@ -2081,7 +2078,7 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
     });
 
     if (messageId) {
-      await sendTypingIndicator(from, messageId);
+      await markMessageAsRead(messageId);
     }
 
     // Download image if type is image
