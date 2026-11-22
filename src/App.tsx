@@ -140,13 +140,43 @@ export default function App() {
     registerServiceWorker();
   }, []);
 
-  // Auth Headers helper
+  // Auth Headers helper with diagnostic logging
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const method = options.method || 'GET';
+    const startTime = performance.now();
+
+    // Pretty console logs in browser DevTools
+    const bodyPreview = options.body && typeof options.body === 'string'
+      ? (options.body.length > 250 ? `${options.body.substring(0, 250)}... [truncated]` : options.body)
+      : undefined;
+
+    console.log(`%c[API Request] ${method} ${url}`, 'color: #38bdf8; font-weight: bold;', bodyPreview ? { payload: bodyPreview } : '');
+
     const headers = {
       ...(options.headers || {}),
       'Authorization': `Bearer ${userToken}`
     };
-    return fetch(url, { ...options, headers });
+
+    try {
+      const res = await fetch(url, { ...options, headers });
+      const duration = Math.round(performance.now() - startTime);
+      const isSuccess = res.ok;
+      const statusColor = isSuccess ? '#4ade80' : res.status < 500 ? '#f59e0b' : '#ef4444';
+      
+      console.log(
+        `%c[API Response] ${method} ${url} → ${res.status} ${res.statusText} (${duration}ms)`,
+        `color: ${statusColor}; font-weight: bold;`
+      );
+      return res;
+    } catch (err: any) {
+      const duration = Math.round(performance.now() - startTime);
+      console.error(
+        `%c[API Error] ${method} ${url} failed after ${duration}ms:`,
+        'color: #ef4444; font-weight: bold;',
+        err
+      );
+      throw err;
+    }
   };
 
   const fetchState = async () => {
@@ -451,13 +481,15 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Image })
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        return await res.json();
+        return data;
       }
-    } catch (e) {
+      return { error: true, message: data.message || 'OCR analysis failed.' };
+    } catch (e: any) {
       console.error('OCR analysis failed:', e);
+      return { error: true, message: e.message || 'Network error during OCR analysis.' };
     }
-    return null;
   };
 
   // WhatsApp emulator helper APIs removed because bot is now integrated

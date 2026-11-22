@@ -3,6 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import dns from 'dns';
+try {
+  // Use public DNS to reliably resolve MongoDB Atlas SRV connection strings on Windows
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch {
+  // Ignore if unsupported in environment
+}
+
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -43,6 +51,53 @@ app.use(express.static(path.join(process.cwd(), 'public')));
 // Set up larger limits for base64 uploads (receipt screenshots)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// ------------------- GLOBAL DIAGNOSTIC API LOGGER -------------------
+app.use((req: any, res: any, next: any) => {
+  // Only log API routes to avoid cluttering assets/Vite HMR logs
+  if (!req.path.startsWith('/api')) {
+    return next();
+  }
+
+  const start = Date.now();
+  const requestId = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const timestamp = new Date().toLocaleTimeString('en-IN', { hour12: false });
+
+  // Sanitize request body for console logging (truncate large base64 or long payloads)
+  const sanitize = (obj: any): any => {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.slice(0, 5).map(sanitize);
+    const clean: Record<string, any> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'string' && (v.startsWith('data:image/') || v.length > 300)) {
+        clean[k] = `[string ${(v.length / 1024).toFixed(1)} KB]`;
+      } else if (typeof v === 'object' && v !== null) {
+        clean[k] = sanitize(v);
+      } else {
+        clean[k] = v;
+      }
+    }
+    return clean;
+  };
+
+  const hasBody = req.body && Object.keys(req.body).length > 0;
+  const sanitizedBody = hasBody ? JSON.stringify(sanitize(req.body)) : '';
+  const queryStr = req.query && Object.keys(req.query).length > 0 ? ` ?${new URLSearchParams(req.query as any).toString()}` : '';
+
+  console.log(`\n🔍 [API REQ #${requestId}] ${timestamp} ➡️  ${req.method} ${req.path}${queryStr}${sanitizedBody ? `\n   Payload: ${sanitizedBody}` : ''}`);
+
+  // Capture response finish
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const code = res.statusCode;
+    const statusIcon = code < 300 ? '✅' : code < 400 ? 'ℹ️' : code < 500 ? '⚠️' : '❌';
+    const user = req.user ? ` (User: ${req.user.name || req.user.email || req.user.id})` : '';
+
+    console.log(`🏁 [API RES #${requestId}] ${statusIcon} ${req.method} ${req.path} → Status ${code} (${duration}ms)${user}`);
+  });
+
+  next();
+});
 
 // ------------------- WEB PUSH & VAPID SETUP -------------------
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BJlvnnGBn3rW4arLFz18XEPLRwJBjMC8CLnyiBqXghGWR9JHu2RBe22Fqt5WABY9IV9bk80zYVabygYAKsDJGKQ';
@@ -340,34 +395,52 @@ function getAiClient(): GoogleGenAI {
   return aiClient;
 }
 
-// Reusable Groq API client helper using native fetch (0 package dependencies)
+// Reusable Groq API client helper using native fetch with automatic model fallback
 async function callGroqChat(messages: { role: string; content: string }[], jsonMode: boolean = false): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || apiKey.trim() === '') {
     throw new Error('GROQ_API_KEY is not configured in environment variables.');
   }
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'openai/gpt-oss-120b',
-      messages,
-      temperature: 0.1,
-      ...(jsonMode ? { response_format: { type: 'json_object' } } : {})
-    })
-  });
+  const models = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+  let lastError: any = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Groq API error (status ${response.status}): ${errorText}`);
+  for (const model of models) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.1,
+          ...(jsonMode ? { response_format: { type: 'json_object' } } : {})
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`[Groq] Model ${model} returned ${response.status}: ${errorText}`);
+        lastError = new Error(`Groq API error (status ${response.status}): ${errorText}`);
+        // If rate limited or request too large, fallback to smaller model
+        if (response.status === 429 || response.status === 413 || response.status === 503) {
+          continue;
+        }
+        throw lastError;
+      }
+
+      const data: any = await response.json();
+      return data.choices?.[0]?.message?.content || '';
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[Groq] Attempt with ${model} failed:`, err.message || err);
+    }
   }
 
-  const data: any = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  throw lastError || new Error('All Groq models failed');
 }
 
 // ------------------- API ROUTES -------------------
@@ -775,8 +848,23 @@ app.delete('/api/expenses/:id', authenticateJWT, async (req: any, res) => {
 // Receipt OCR using server-side Gemini
 app.post('/api/ocr', authenticateJWT, async (req, res) => {
   const { base64Image } = req.body;
+  console.log(`[OCR Diagnostic] Received OCR request from user ${req.user?.name || req.user?.id || 'unknown'}`);
+
   if (!base64Image) {
+    console.warn(`[OCR Diagnostic] ❌ Missing base64Image input in request body.`);
     return res.status(400).json({ error: 'Missing base64Image input for OCR' });
+  }
+
+  const imageKb = (base64Image.length / 1024).toFixed(1);
+  console.log(`[OCR Diagnostic] Receipt image payload size: ~${imageKb} KB`);
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey || geminiKey.trim() === '' || geminiKey === 'MY_GEMINI_API_KEY' || !geminiKey.startsWith('AIzaSy')) {
+    console.warn(`[OCR Diagnostic] ⚠️ GEMINI_API_KEY is not a valid Google AI Studio key (starts with AIzaSy). Current key: "${geminiKey ? geminiKey.substring(0, 8) + '...' : 'none'}"`);
+    return res.status(400).json({
+      error: 'GEMINI_API_KEY_INVALID',
+      message: 'A valid Google AI Studio Gemini API key (starts with "AIzaSy...") is required for receipt OCR. Please generate a free key at https://aistudio.google.com/apikey and set GEMINI_API_KEY in your .env.local file.'
+    });
   }
 
   try {
@@ -807,42 +895,66 @@ app.post('/api/ocr', authenticateJWT, async (req, res) => {
       }
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: [
-        {
-          inlineData: {
-            mimeType: 'image/png',
-            data: base64Data
-          }
-        },
-        { text: prompt }
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ['amount', 'merchant', 'date', 'category', 'notes'],
-          properties: {
-            amount: { type: Type.NUMBER, description: 'The absolute total amount of the transaction.' },
-            merchant: { type: Type.STRING, description: 'The business name or payee identity.' },
-            date: { type: Type.STRING, description: 'Date of expenditure in YYYY-MM-DD format.' },
-            category: { type: Type.STRING, description: 'Suggested business category.' },
-            notes: { type: Type.STRING, description: 'Short summary note about the invoice payment.' }
-          }
-        }
-      }
-    });
+    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let parsedData: any = null;
+    let lastError: any = null;
 
-    const parsedData = JSON.parse(response.text || '{}');
+    for (const model of models) {
+      try {
+        console.log(`[OCR Diagnostic] Calling Gemini API model "${model}"...`);
+        const modelStart = Date.now();
+        const response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              inlineData: {
+                mimeType: 'image/png',
+                data: base64Data
+              }
+            },
+            { text: prompt }
+          ],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              required: ['amount', 'merchant', 'date', 'category', 'notes'],
+              properties: {
+                amount: { type: Type.NUMBER, description: 'The absolute total amount of the transaction.' },
+                merchant: { type: Type.STRING, description: 'The business name or payee identity.' },
+                date: { type: Type.STRING, description: 'Date of expenditure in YYYY-MM-DD format.' },
+                category: { type: Type.STRING, description: 'Suggested business category.' },
+                notes: { type: Type.STRING, description: 'Short summary note about the invoice payment.' }
+              }
+            }
+          }
+        });
+
+        parsedData = JSON.parse(response.text || '{}');
+        console.log(`[OCR Diagnostic] ✅ Successfully parsed with "${model}" in ${Date.now() - modelStart}ms! Extracted: amount=₹${parsedData.amount}, merchant="${parsedData.merchant}", category="${parsedData.category}", date="${parsedData.date}"`);
+        break;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[OCR Diagnostic] ⚠️ Attempt with "${model}" failed: ${err.message || err}`);
+      }
+    }
+
+    if (!parsedData) {
+      throw lastError || new Error('All Gemini OCR models failed.');
+    }
+
     if (parsedData.category) {
       parsedData.category = normalizeCategory(parsedData.category);
     }
     res.json({ success: true, extracted: parsedData });
 
   } catch (error: any) {
-    console.error('OCR Extraction Failure:', error);
-    res.status(500).json({ error: 'Failed to run AI OCR', message: error.message });
+    console.error('[OCR Diagnostic] ❌ OCR Extraction Failure:', error.message || error);
+    let message = error.message || 'Unknown server error';
+    if (message.includes('API key not valid') || message.includes('API_KEY_INVALID') || message.includes('UNAUTHENTICATED')) {
+      message = 'Google Gemini API key is invalid or unauthorized. Please verify your GEMINI_API_KEY in .env.local.';
+    }
+    res.status(500).json({ error: 'Failed to run AI OCR', message });
   }
 });
 
@@ -1100,11 +1212,17 @@ async function handleProgrammaticCommand(text: string): Promise<string | null> {
 // WhatsApp AI Parsing helper
 // Receipt OCR using server-side Gemini
 async function runOcrOnReceipt(base64Image: string): Promise<{ amount: number; merchant: string; date: string; notes?: string } | null> {
-  const models = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey || geminiKey.trim() === '' || geminiKey === 'MY_GEMINI_API_KEY' || !geminiKey.startsWith('AIzaSy')) {
+    console.warn('[OCR Helper] GEMINI_API_KEY is not configured or not a valid Google AI Studio key (starts with AIzaSy).');
+    return null;
+  }
+
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
   
   for (const model of models) {
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 2;
     while (attempts < maxAttempts) {
       try {
         console.log(`[OCR Helper] Attempting OCR with model: ${model} (attempt ${attempts + 1}/${maxAttempts})...`);
@@ -1174,7 +1292,7 @@ async function runOcrOnReceipt(base64Image: string): Promise<{ amount: number; m
         attempts++;
         console.warn(`[OCR Helper] Attempt ${attempts} failed for model ${model}. Error:`, error.message || error);
         
-        const isDepleted = error.message && (error.message.includes('prepayment credits') || error.message.includes('RESOURCE_EXHAUSTED') || error.message.includes('API_KEY_INVALID'));
+        const isDepleted = error.message && (error.message.includes('prepayment credits') || error.message.includes('RESOURCE_EXHAUSTED') || error.message.includes('API_KEY_INVALID') || error.message.includes('UNAUTHENTICATED'));
         if (isDepleted && attempts >= 1) {
           break;
         }
@@ -1204,7 +1322,6 @@ async function parseExpenseWithAi(
     console.log(`[${traceId}] parseExpenseWithAi called. text="${text || ''}" ocrData=${JSON.stringify(ocrData)} hasActiveSession=${!!activeSession}`);
   }
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-  const ai = getAiClient();
 
   const [groupsList, usersList, stats] = await Promise.all([
     GroupModel.find(),
@@ -1292,27 +1409,27 @@ The user's new message is likely responding to this proposal by confirming it (p
     Your goal:
     1. Interpret the user input:
        ${userIntentDescription}
-    2. Determine the ACTION:
-       - If they want to log/save/confirm the proposed expense (e.g. "confirm", "yes", "save it", or "add note X and confirm"): action = "log_expense".
-       - If they want to discard/cancel the proposal (e.g. "cancel", "no cancel", "discard it"): action = "cancel_expense".
+    2. Determine the ACTION (must be exactly one of: "log_expense", "cancel_expense", "ask_question", "need_clarification"):
+       - If they want to log/save an expense or confirm a proposal: action = "log_expense".
+       - If they want to discard/cancel the proposal: action = "cancel_expense".
        - If they are asking a question about statistics, balances, spending, or savings: action = "ask_question".
        - If crucial details (like amount) are missing: action = "need_clarification".
     3. If action is "log_expense":
-       - Merge any corrections/details from the user input with the pending session proposal (if one exists). For example, if they say "add note as spend for friend and confirm it", the notes should be updated to "spend for friend", and other details (amount, category, merchant) should be carried over from the pending proposal.
-       - Extract the final details: amount (number), merchant, date (YYYY-MM-DD or today), category (map to standard categories), notes.
+       - Merge any corrections/details from the user input with the pending session proposal (if one exists).
+       - Extract: amount (number), merchant, date (YYYY-MM-DD or today), category (map to standard categories: ${categoriesList.join(', ')}), notes.
        - Identify if a specific family member paid (e.g., "Naveen paid 300"). If explicitly mentioned, output their name in "paidByName". Otherwise leave blank.
-       - Assign a "confidence" score (0-100). If it is a confirmation of a pending proposal (with or without corrections), or details are fully complete, set confidence high (e.g., >= 95) so it auto-logs.
+       - Assign a "confidence" score (integer between 0 and 100, e.g. 95).
     4. If action is "cancel_expense":
-       - Return a reply indicating that the proposal has been cancelled (e.g. "❌ *Confirmation Cancelled!* ...").
+       - Return a reply indicating that the proposal has been cancelled.
     5. If action is "ask_question":
-       - Formulate a detailed financial reply based ONLY on the CURRENT FINANCIAL STATISTICS CONTEXT. Use standard WhatsApp markdown formatting (e.g. *bold*, list points).
-    6. Outputs structure in raw JSON matching the required schema.
+       - Formulate a detailed financial reply based ONLY on the CURRENT FINANCIAL STATISTICS CONTEXT. Use standard WhatsApp formatting (*bold*, bullet points).
+    6. Return a valid JSON object matching the required schema.
   `;
 
   const messages = [
     {
       role: 'system',
-      content: 'You are FamBudget Bot. You must return a valid JSON object containing action, reply, expenseProposed (amount, category, date, merchant, notes, paidByName), and confidence. Do not wrap the JSON output in markdown block code fences or include extra text.'
+      content: 'You are FamBudget Bot. You must return a valid JSON object with keys: "action" (must be "log_expense", "cancel_expense", "ask_question", or "need_clarification"), "reply" (string), "expenseProposed" (object with amount, category, date, merchant, notes, paidByName), and "confidence" (number 0-100). Do not include markdown fences.'
     },
     {
       role: 'user',
@@ -1323,7 +1440,29 @@ The user's new message is likely responding to this proposal by confirming it (p
   const responseText = await callGroqChat(messages, true);
   try {
     const cleaned = responseText.replace(/```json/i, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
+    const result = JSON.parse(cleaned);
+
+    // Normalize action name for consistency
+    let action = (result.action || '').toString().toLowerCase().trim();
+    if (['log_expense', 'addexpense', 'add_expense', 'logexpense', 'record_expense', 'save_expense'].includes(action)) {
+      action = 'log_expense';
+    } else if (['cancel_expense', 'cancelexpense', 'cancel', 'discard', 'reject'].includes(action)) {
+      action = 'cancel_expense';
+    } else if (['ask_question', 'askquestion', 'question', 'query', 'insights'].includes(action)) {
+      action = 'ask_question';
+    } else if (['need_clarification', 'clarify', 'needclarification'].includes(action)) {
+      action = 'need_clarification';
+    }
+    result.action = action;
+
+    // Normalize confidence: if between 0 and 1 (like 0.95), convert to percentage (95)
+    if (typeof result.confidence === 'number' && result.confidence <= 1 && result.confidence > 0) {
+      result.confidence = Math.round(result.confidence * 100);
+    } else if (typeof result.confidence !== 'number') {
+      result.confidence = 95;
+    }
+
+    return result;
   } catch (err: any) {
     console.error(`[${traceId || 'ParseAI'}] Failed to parse Groq response: "${responseText}"`, err);
     throw new Error(`Failed to parse Groq response as JSON: ${err.message}`);
@@ -1904,12 +2043,18 @@ async function processWebhookMessageAsync(message: any, traceId: string): Promis
     const totalUsers = await UserModel.countDocuments();
     console.log(`[${traceId}] Total users in DB: ${totalUsers}`);
 
-    // Find linked user profile by phone number (removing non-digits)
+    // Find linked user profile by phone number (robust matching with/without country code)
     const cleanFrom = from.replace(/\D/g, '');
-    console.log(`[${traceId}] Before user lookup with number: ${cleanFrom}`);
+    const last10 = cleanFrom.slice(-10);
+    console.log(`[${traceId}] Before user lookup with number: ${cleanFrom} (last10: ${last10})`);
 
     const user = await UserModel.findOne({
-      whatsappNumber: cleanFrom
+      $or: [
+        { whatsappNumber: cleanFrom },
+        { whatsappNumber: last10 },
+        { whatsappNumber: '91' + last10 },
+        { whatsappNumber: { $regex: new RegExp(last10 + '$') } }
+      ]
     });
 
     console.log(`[${traceId}] After user lookup. Found user:`, user ? `${user.name} (${user.id})` : 'null');
@@ -2067,32 +2212,38 @@ app.post('/api/whatsapp/clear', authenticateJWT, async (req: any, res) => {
 app.post('/api/ai/advisor', authenticateJWT, async (req: any, res) => {
   const { text } = req.body;
   if (!text) {
+    console.warn('[Advisor Diagnostic] ❌ Empty advisor prompt message payload.');
     return res.status(400).json({ error: 'Empty advisor prompt message payload' });
   }
 
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || apiKey === 'MOCK_KEY_IF_ABSENT' || apiKey.trim() === '') {
+    console.warn('[Advisor Diagnostic] ⚠️ GROQ_API_KEY is missing or unconfigured.');
     return res.status(400).json({
       error: 'GROQ_API_KEY_MISSING',
       message: 'GROQ_API_KEY is not configured in your environment or .env.local. Please add a valid API key to .env.local and restart the server to use the AI Financial Advisor.'
     });
   }
 
+  const advisorStart = Date.now();
   try {
     const userId = req.user.id;
     const user = await UserModel.findOne({ id: userId });
     if (!user) {
+      console.warn(`[Advisor Diagnostic] ❌ User context missing in database: userId=${userId}`);
       return res.status(400).json({ error: 'User context is missing in database' });
     }
+
+    console.log(`[Advisor Diagnostic] User "${user.name}" (${user.id}) prompted: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"`);
 
     // 1. Fetch current database state
     const dbState = await getDBState(userId);
 
-    // 2. Prepare text context summarizing expenses, groups, and settlements
-    const groupsString = dbState.groups.map(g => `- Group ID: ${g.id}, Name: ${g.name}`).join('\n');
-    const usersString = dbState.users.map(u => `- Member Name: ${u.name}, ID: ${u.id}, Group ID: ${u.groupId}, Role: ${u.role}`).join('\n');
+    // 2. Prepare aggregated and summarized financial context for Groq
+    const groupsString = dbState.groups.map(g => `- Group: ${g.name} (ID: ${g.id})`).join('\n');
+    const usersString = dbState.users.map(u => `- Member: ${u.name} (Group: ${u.groupId}, Role: ${u.role})`).join('\n');
 
-    // Map user IDs to names for readability in expense log
+    // Map user IDs and Group IDs to names
     const userMap: { [id: string]: string } = {};
     dbState.users.forEach(u => {
       userMap[u.id] = u.name;
@@ -2102,35 +2253,80 @@ app.post('/api/ai/advisor', authenticateJWT, async (req: any, res) => {
       groupMap[g.id] = g.name;
     });
 
-    const expensesString = dbState.expenses.map(e => {
+    let totalSpend = 0;
+    const categoryTotals: { [cat: string]: number } = {};
+    const groupTotals: { [grp: string]: number } = {};
+    const memberTotals: { [mem: string]: number } = {};
+
+    dbState.expenses.forEach(e => {
+      const amt = Number(e.amount) || 0;
+      totalSpend += amt;
+      const cat = e.category || 'Mislenious';
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + amt;
+      const gName = groupMap[e.groupId] || e.groupId;
+      groupTotals[gName] = (groupTotals[gName] || 0) + amt;
+      const mName = userMap[e.paidBy] || e.paidBy;
+      memberTotals[mName] = (memberTotals[mName] || 0) + amt;
+    });
+
+    // Sort expenses newest first and pass recent 25 transactions with context
+    const sortedExpenses = [...dbState.expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const recentExpensesString = sortedExpenses.slice(0, 25).map(e => {
       const payer = userMap[e.paidBy] || e.paidBy;
       const grp = groupMap[e.groupId] || e.groupId;
-      return `- Date: ${e.date}, Amount: ₹${e.amount}, Category: ${e.category}, Paid By: ${payer}, Group: ${grp}, Merchant: ${e.merchant}, Notes: ${e.notes}`;
+      return `- ${e.date}: ₹${e.amount} (${e.category}) by ${payer} [${grp}] at ${e.merchant}${e.notes ? ` - "${e.notes}"` : ''}`;
     }).join('\n') || 'No expenses logged yet.';
+
+    const categoryBreakdownString = Object.entries(categoryTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, amt]) => `- ${cat}: ₹${amt.toLocaleString('en-IN')}`)
+      .join('\n') || 'None';
+
+    const groupBreakdownString = Object.entries(groupTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([grp, amt]) => `- ${grp}: ₹${amt.toLocaleString('en-IN')}`)
+      .join('\n') || 'None';
+
+    const memberBreakdownString = Object.entries(memberTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([mem, amt]) => `- ${mem}: ₹${amt.toLocaleString('en-IN')}`)
+      .join('\n') || 'None';
 
     const settlementsString = dbState.settlements.map(s => {
       const fromG = groupMap[s.fromGroup] || s.fromGroup;
       const toG = groupMap[s.toGroup] || s.toGroup;
-      return `- Date: ${s.date}, Amount: ₹${s.amount}, Status: ${s.status}, From: ${fromG}, To: ${toG}, Notes: ${s.notes || ''}`;
+      return `- Date: ${s.date}, Amount: ₹${s.amount}, Status: ${s.status}, From: ${fromG}, To: ${toG}${s.notes ? `, Notes: ${s.notes}` : ''}`;
     }).join('\n') || 'No settlements logged yet.';
 
     const today = new Date().toISOString().split('T')[0];
 
-    // 3. System instruction text
+    // 3. System instruction text with concise, high-value metrics (well within token limits)
     const systemInstruction = `
 You are "Sharma Finance Advisor", a premium, wise, and helpful AI financial consultant for the Sharma family assembly.
-Your goal is to analyze the family's expense ledger, groups, users, and settlements, and provide personalized, highly contextual financial insights, saving strategies, group-wise spending breakdowns, and answer any queries.
+Your goal is to analyze the family's expense metrics, groups, users, and settlements, and provide personalized, highly contextual financial insights, saving strategies, group-wise spending breakdowns, and answer any queries.
 
-DATABASE CONTEXT:
+FINANCIAL CONTEXT:
 - Family Name: ${dbState.family?.name || 'Sharma Family Assembly'}
-- Groups (Couples/Parents):
+- Total All-Time Spend: ₹${totalSpend.toLocaleString('en-IN')}
+- Total Logged Expenses Count: ${dbState.expenses.length}
+
+GROUPS & MEMBERS:
 ${groupsString}
-- Members:
 ${usersString}
-- Expenses Logged:
-${expensesString}
-- Settlements Engine Data:
+
+SPENDING BREAKDOWNS:
+- Category Totals:
+${categoryBreakdownString}
+- Couple/Group Totals:
+${groupBreakdownString}
+- Member Totals:
+${memberBreakdownString}
+
+SETTLEMENTS & DEBTS:
 ${settlementsString}
+
+RECENT 25 EXPENSES:
+${recentExpensesString}
 
 Current Date Today: ${today}
 Current User Chatting with you: ${user.name} (Group: ${groupMap[user.groupId] || user.groupId})
@@ -2146,11 +2342,10 @@ CRITICAL READ-ONLY RULES:
 RULES & STYLE:
 1. Be polite, encouraging, professional yet warm, using finance/wealth metaphors when appropriate.
 2. Structure your response using markdown. Use tables, bold headers, list bullet points, and highlight metrics (like ₹ amounts) to make it visually premium and readable.
-3. When answering queries about category spending, compute exact sums if possible.
-4. Offer action-oriented suggestions (e.g., "Couple 2 is spending 40% of the dining out budget, they could cook at home to save ₹X").
-5. Refer to family members by their names (e.g., Chetan, Naveen, Sneha, Riyati, Papa, Mummy).
-6. Ground your answers ONLY in the provided database context. If there are no expenses yet, welcome the family and suggest adding their first expense to unlock advice!
-7. Keep responses concise and focused on the user's query. Do not reference raw IDs like 'grp-1' or 'usr-2' in your messages, use their names or group display names instead.
+3. Offer action-oriented suggestions based on the provided spending metrics.
+4. Refer to family members by their names (e.g., Chetan, Naveen, Sneha, Riyati, Papa, Mummy).
+5. Ground your answers ONLY in the provided database context.
+6. Keep responses concise and focused on the user's query.
 `;
 
     // 4. Save user message to MongoDB
@@ -2162,20 +2357,22 @@ RULES & STYLE:
       timestamp: new Date().toISOString()
     });
 
-    // 5. Gather chat history for Groq model context
-    // Fetch all advisor messages for this user (including the new user message we just saved)
-    const chatHistory = await AdvisorChatModel.find({ userId }).sort({ timestamp: 1 });
+    // 5. Gather chat history for Groq model context (keep last 10 messages to respect TPM token budget)
+    const recentMessages = await AdvisorChatModel.find({ userId }).sort({ timestamp: -1 }).limit(10);
+    recentMessages.reverse();
 
     // Format messages for the Groq completions format: [{role: 'system' | 'user' | 'assistant', content: string}]
     const messages = [
       { role: 'system', content: systemInstruction },
-      ...chatHistory.map(msg => ({
+      ...recentMessages.map(msg => ({
         role: msg.role === 'model' ? 'assistant' : 'user',
         content: msg.text
       }))
     ];
 
+    console.log(`[Advisor Diagnostic] Calling Groq API with context (${messages.length} messages, ${dbState.expenses.length} expenses)...`);
     const replyText = await callGroqChat(messages, false);
+    console.log(`[Advisor Diagnostic] ✅ Groq response received (${replyText.length} chars) in ${Date.now() - advisorStart}ms!`);
 
     // 6. Save model response to MongoDB
     await AdvisorChatModel.create({
@@ -2191,7 +2388,7 @@ RULES & STYLE:
     res.json(updatedState);
 
   } catch (error: any) {
-    console.error('Advisor Chat Error:', error);
+    console.error(`[Advisor Diagnostic] ❌ Advisor Chat Error (${Date.now() - advisorStart}ms):`, error.message || error);
     let message = error.message || 'Unknown server error';
     if (message.includes('API key not valid') || message.includes('API_KEY_INVALID') || message.includes('unauthorized') || message.includes('forbidden')) {
       message = 'The configured GROQ_API_KEY is invalid or unauthorized. Please check your key in your .env.local file.';

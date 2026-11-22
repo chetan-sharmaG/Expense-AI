@@ -348,6 +348,8 @@ export default function ExpensesView({
           }
           if (notes) setFormNotes(notes);
           setOcrSuccessMsg('🚀 Gemini AI successfully extracted transaction data!');
+        } else if (result && result.message) {
+          setOcrSuccessMsg(`⚠️ ${result.message}`);
         } else {
           setOcrSuccessMsg('Could not read details clearly. Please fill details manually or retry.');
         }
