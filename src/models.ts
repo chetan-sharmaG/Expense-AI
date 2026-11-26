@@ -23,6 +23,8 @@ export interface IUser extends Document {
   groupId: string;
   role: 'admin' | 'member';
   whatsappNumber?: string;
+  telegramChatId?: string;
+  telegramUsername?: string;
 }
 
 export interface IWhatsAppSession extends Document {
@@ -117,7 +119,9 @@ const UserSchema = new Schema<IUser>({
   password:       { type: String, required: true },
   groupId:        { type: String, required: true },
   role:           { type: String, enum: ['admin', 'member'], default: 'member' },
-  whatsappNumber: { type: String, sparse: true, unique: true }
+  whatsappNumber: { type: String, sparse: true, unique: true },
+  telegramChatId: { type: String, sparse: true, index: true },
+  telegramUsername: { type: String, sparse: true }
 });
 export const UserModel = getModel<IUser>('User', UserSchema);
 

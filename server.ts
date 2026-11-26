@@ -2243,6 +2243,427 @@ app.post('/api/whatsapp/clear', authenticateJWT, async (req: any, res) => {
   }
 });
 
+// ------------------- TELEGRAM BOT INTEGRATION -------------------
+
+async function sendTelegramMessage(
+  chatId: string | number,
+  text: string,
+  extra?: { reply_markup?: any; parse_mode?: string }
+): Promise<any> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.error('[Telegram] TELEGRAM_BOT_TOKEN is not configured in environment.');
+    return null;
+  }
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  const body: any = {
+    chat_id: chatId,
+    text,
+    parse_mode: extra?.parse_mode !== undefined ? extra.parse_mode : 'HTML',
+    ...extra
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data: any = await res.json();
+    if (!data.ok) {
+      // If HTML entity parsing fails (e.g. unescaped < or &), retry without parse_mode
+      if (data.description && data.description.includes("can't parse entities")) {
+        const retryBody = { ...body, parse_mode: undefined };
+        const retryRes = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(retryBody)
+        });
+        return await retryRes.json();
+      }
+      console.error('[Telegram] sendMessage failed:', data);
+    }
+    return data;
+  } catch (err: any) {
+    console.error('[Telegram] Network error in sendTelegramMessage:', err.message);
+    return null;
+  }
+}
+
+async function downloadTelegramPhoto(fileId: string): Promise<string> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not configured.');
+
+  const getFileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
+  const getFileData: any = await getFileRes.json();
+  if (!getFileData.ok || !getFileData.result?.file_path) {
+    throw new Error(`Failed to get Telegram file info: ${getFileData.description || 'Unknown error'}`);
+  }
+
+  const filePath = getFileData.result.file_path;
+  const downloadUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
+  const fileRes = await fetch(downloadUrl);
+  if (!fileRes.ok) {
+    throw new Error(`Failed to download Telegram media: HTTP ${fileRes.status}`);
+  }
+
+  const arrayBuffer = await fileRes.arrayBuffer();
+  return Buffer.from(arrayBuffer).toString('base64');
+}
+
+async function processTelegramUpdate(update: any, traceId: string): Promise<void> {
+  const message = update.message;
+  const callbackQuery = update.callback_query;
+
+  // 1. Handle Inline Button Click (e.g. Confirm / Cancel)
+  if (callbackQuery) {
+    const chatId = callbackQuery.message?.chat?.id;
+    const data = callbackQuery.data;
+    const fromId = String(callbackQuery.from?.id);
+    const username = callbackQuery.from?.username;
+
+    // Acknowledge callback query
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (token) {
+      fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: callbackQuery.id })
+      }).catch(() => {});
+    }
+
+    if (!chatId) return;
+
+    let user = await UserModel.findOne({
+      $or: [
+        { telegramChatId: String(chatId) },
+        { telegramChatId: fromId },
+        ...(username ? [{ telegramUsername: username }] : [])
+      ]
+    });
+
+    if (!user) {
+      await sendTelegramMessage(chatId, '⚠️ Please send /start first to link your account.');
+      return;
+    }
+
+    const sessionIdentifier = `tg_${chatId}`;
+    const replyResult = await handleIncomingMessageFlow(data, undefined, user, sessionIdentifier, false, traceId);
+    let replyText = typeof replyResult === 'string' ? replyResult : replyResult.text;
+    replyText = replyText.replace(/\*([^\*]+)\*/g, '<b>$1</b>').replace(/_([^_]+)_/g, '<i>$1</i>');
+    await sendTelegramMessage(chatId, replyText);
+    return;
+  }
+
+  if (!message) return;
+
+  const chatId = message.chat?.id;
+  const fromId = String(message.from?.id);
+  const username = message.from?.username;
+  const firstName = message.from?.first_name || 'Family Member';
+  let text = message.text?.trim();
+  const caption = message.caption?.trim();
+  const photo = message.photo;
+  const contact = message.contact;
+
+  if (!chatId) return;
+
+  console.log(`\n--------------------------------------------------------------`);
+  console.log(`[${traceId}] ✈️ TELEGRAM UPDATE RECEIVED`);
+  console.log(`   Chat ID: ${chatId} | From: ${firstName} (@${username || 'none'}, ID: ${fromId})`);
+  console.log(`   Type: ${photo ? 'photo' : (contact ? 'contact' : 'text')}`);
+  if (text) console.log(`   Text: "${text}"`);
+  if (caption) console.log(`   Caption: "${caption}"`);
+
+  // Lookup linked user by telegramChatId or username
+  let user = await UserModel.findOne({
+    $or: [
+      { telegramChatId: String(chatId) },
+      { telegramChatId: fromId },
+      ...(username ? [{ telegramUsername: username }] : [])
+    ]
+  });
+
+  // 2. Handle Contact Share ("📱 Link My Phone Number")
+  if (contact && contact.phone_number) {
+    const rawPhone = contact.phone_number.replace(/\D/g, '');
+    const last10 = rawPhone.slice(-10);
+    console.log(`[${traceId}] Contact shared: phone=${rawPhone} (last10=${last10})`);
+
+    const matchedUser = await UserModel.findOne({
+      $or: [
+        { whatsappNumber: rawPhone },
+        { whatsappNumber: last10 },
+        { whatsappNumber: '91' + last10 },
+        { whatsappNumber: { $regex: new RegExp(last10 + '$') } }
+      ]
+    });
+
+    if (matchedUser) {
+      matchedUser.telegramChatId = String(chatId);
+      if (username) matchedUser.telegramUsername = username;
+      await matchedUser.save();
+      console.log(`[${traceId}] ✅ Successfully linked user "${matchedUser.name}" to Telegram Chat ID ${chatId}`);
+
+      await sendTelegramMessage(
+        chatId,
+        `✅ <b>Account Linked Successfully!</b>\n\nWelcome, <b>${matchedUser.name}</b>! Your Telegram is now connected to <b>FamilyFunds</b>.\n\n` +
+        `📸 <b>Send a photo</b> of any receipt, bill, or payment screenshot (GPay, PhonePe, Paytm, etc.) to scan it with AI.\n` +
+        `💬 <b>Type an expense</b> like: <i>"Paid 450 for coffee at Starbucks"</i>\n\n` +
+        `Your expenses will be logged directly into your FamilyFunds ledger! 🚀`,
+        { reply_markup: { remove_keyboard: true } }
+      );
+      return;
+    } else {
+      await sendTelegramMessage(
+        chatId,
+        `⚠️ <b>Phone Number Not Found</b>\n\nWe couldn't find a FamilyFunds account with the phone number <b>${contact.phone_number}</b>.\n\n` +
+        `Please ensure this phone number is added in the FamilyFunds app under <b>Family & Groups</b> settings, or reply with your registered email address.`
+      );
+      return;
+    }
+  }
+
+  // 3. Handle /start command or Deep Linking
+  if (text && text.startsWith('/start')) {
+    const parts = text.split(' ');
+    const deepLinkParam = parts[1]?.trim();
+
+    if (deepLinkParam) {
+      const matched = await UserModel.findOne({ id: deepLinkParam });
+      if (matched) {
+        matched.telegramChatId = String(chatId);
+        if (username) matched.telegramUsername = username;
+        await matched.save();
+        await sendTelegramMessage(
+          chatId,
+          `✅ <b>Account Linked Successfully!</b>\n\nWelcome, <b>${matched.name}</b>! Your Telegram account is now connected to <b>FamilyFunds</b>. 🚀\n\nSend any bill photo or text to start logging expenses!`,
+          { reply_markup: { remove_keyboard: true } }
+        );
+        return;
+      }
+    }
+
+    if (user) {
+      await sendTelegramMessage(
+        chatId,
+        `👋 Welcome back, <b>${user.name}</b>!\n\nI am your <b>FamilyFunds AI Expense Bot</b>.\n\n` +
+        `📸 <b>Send a receipt photo</b> to scan with AI OCR\n` +
+        `💬 <b>Type an expense</b> (e.g. <i>"Paid 1200 for petrol"</i>)\n` +
+        `📊 <b>Ask your spending</b> (e.g. <i>"How much did I spend this week?"</i>)\n\n` +
+        `Every expense is automatically synced with your FamilyFunds dashboard! 💰`,
+        { reply_markup: { remove_keyboard: true } }
+      );
+      return;
+    }
+
+    await sendTelegramMessage(
+      chatId,
+      `👋 <b>Welcome to FamilyFunds!</b>\n\nI'm your AI Expense Bot. To link your expenses to your family profile, tap the button below to share your phone number, or reply with your registered phone number or email:`,
+      {
+        reply_markup: {
+          keyboard: [
+            [{ text: '📱 Link My Phone Number', request_contact: true }]
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true
+        }
+      }
+    );
+    return;
+  }
+
+  // 4. If not linked, check if text is a phone number or email
+  if (!user && text) {
+    const potentialEmail = text.toLowerCase().trim();
+    const potentialPhone = text.replace(/\D/g, '');
+    const last10 = potentialPhone.slice(-10);
+
+    let foundUser = null;
+    if (potentialEmail.includes('@')) {
+      foundUser = await UserModel.findOne({ email: potentialEmail });
+    } else if (last10.length === 10) {
+      foundUser = await UserModel.findOne({
+        $or: [
+          { whatsappNumber: potentialPhone },
+          { whatsappNumber: last10 },
+          { whatsappNumber: '91' + last10 },
+          { whatsappNumber: { $regex: new RegExp(last10 + '$') } }
+        ]
+      });
+    }
+
+    if (foundUser) {
+      foundUser.telegramChatId = String(chatId);
+      if (username) foundUser.telegramUsername = username;
+      await foundUser.save();
+      user = foundUser;
+      await sendTelegramMessage(
+        chatId,
+        `✅ <b>Linked Successfully!</b>\n\nWelcome, <b>${user.name}</b>! You can now send bill receipts or text messages to log expenses directly. 🚀`,
+        { reply_markup: { remove_keyboard: true } }
+      );
+      return;
+    }
+  }
+
+  // 5. Fallback if single user or prompt to link
+  if (!user) {
+    const allUsers = await UserModel.find({}, { name: 1, email: 1, whatsappNumber: 1 });
+    if (allUsers.length === 1) {
+      user = allUsers[0];
+      user.telegramChatId = String(chatId);
+      if (username) user.telegramUsername = username;
+      await user.save();
+      console.log(`[${traceId}] Auto-linked single user: ${user.name}`);
+    } else {
+      await sendTelegramMessage(
+        chatId,
+        `⚠️ <b>Account Not Linked</b>\n\nPlease tap the <b>📱 Link My Phone Number</b> button below or send your registered email address to connect your account.`,
+        {
+          reply_markup: {
+            keyboard: [
+              [{ text: '📱 Link My Phone Number', request_contact: true }]
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: true
+          }
+        }
+      );
+      return;
+    }
+  }
+
+  console.log(`[${traceId}] ✅ User Identified: "${user.name}" (${user.id}), Group: ${user.groupId}`);
+
+  let base64Image: string | undefined;
+
+  // Download highest resolution photo if present
+  if (photo && photo.length > 0) {
+    const highestRes = photo[photo.length - 1];
+    console.log(`[${traceId}] 🖼️ Downloading photo (file_id=${highestRes.file_id})...`);
+    try {
+      base64Image = await downloadTelegramPhoto(highestRes.file_id);
+      console.log(`[${traceId}] ✅ Successfully downloaded receipt image from Telegram.`);
+    } catch (err: any) {
+      console.error(`[${traceId}] ❌ Photo download failed:`, err.message);
+      await sendTelegramMessage(chatId, `❌ Failed to download the receipt photo. Please try sending again.`);
+      return;
+    }
+  }
+
+  const effectiveText = text || caption || '';
+  const sessionIdentifier = `tg_${chatId}`;
+
+  console.log(`[${traceId}] 🧠 Running unified AI message flow processor...`);
+  const replyResult = await handleIncomingMessageFlow(
+    effectiveText,
+    base64Image,
+    user,
+    sessionIdentifier,
+    false,
+    traceId
+  );
+
+  let replyText = typeof replyResult === 'string' ? replyResult : replyResult.text;
+  let replyOptions: any = {};
+
+  if (typeof replyResult === 'object' && replyResult.buttons && replyResult.buttons.length > 0) {
+    replyOptions = {
+      reply_markup: {
+        inline_keyboard: [
+          replyResult.buttons.map(b => ({
+            text: b.title,
+            callback_data: b.title
+          }))
+        ]
+      }
+    };
+  }
+
+  // Convert WhatsApp markdown to Telegram HTML
+  replyText = replyText
+    .replace(/\*([^\*]+)\*/g, '<b>$1</b>')
+    .replace(/_([^_]+)_/g, '<i>$1</i>');
+
+  console.log(`[${traceId}] 📤 Sending response to Telegram chat ${chatId}...`);
+  await sendTelegramMessage(chatId, replyText, replyOptions);
+  console.log(`[${traceId}] 🏁 Telegram pipeline completed successfully.\n`);
+}
+
+// Telegram Webhook Endpoint
+app.post('/api/telegram/webhook', async (req, res) => {
+  const update = req.body;
+  const updateId = update?.update_id;
+  const timeStr = new Date().toLocaleTimeString('en-IN', { hour12: false });
+  console.log(`\n==============================================================`);
+  console.log(`✈️ [TELEGRAM WEBHOOK EVENT] ${timeStr} | Update ID: ${updateId}`);
+
+  // Return 200 OK immediately
+  res.status(200).json({ ok: true });
+
+  if (!update) return;
+
+  const traceId = `tg-${updateId || Date.now()}`;
+  try {
+    await processTelegramUpdate(update, traceId);
+  } catch (err: any) {
+    console.error(`[${traceId}] ❌ Fatal error processing Telegram update:`, err);
+  }
+});
+
+// Helper endpoint to check or set Telegram Webhook
+app.get('/api/telegram/set-webhook', async (req, res) => {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN is not configured' });
+  }
+
+  const requestedUrl = (req.query.url as string) || (process.env.APP_URL ? `${process.env.APP_URL}/api/telegram/webhook` : null);
+  if (!requestedUrl) {
+    return res.status(400).json({
+      error: 'URL_REQUIRED',
+      message: 'Please provide ?url=https://<your-domain>/api/telegram/webhook or configure APP_URL'
+    });
+  }
+
+  try {
+    const telegramRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(requestedUrl)}`);
+    const telegramData: any = await telegramRes.json();
+    return res.json({
+      success: telegramData.ok,
+      webhookUrl: requestedUrl,
+      telegramResponse: telegramData
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper endpoint to get Telegram bot and webhook info
+app.get('/api/telegram/info', async (req, res) => {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN is not configured' });
+  }
+
+  try {
+    const [meRes, webhookRes] = await Promise.all([
+      fetch(`https://api.telegram.org/bot${token}/getMe`),
+      fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`)
+    ]);
+    const meData: any = await meRes.json();
+    const webhookData: any = await webhookRes.json();
+    return res.json({
+      ok: true,
+      bot: meData.result,
+      webhook: webhookData.result
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ------------------- GEMINI AI FINANCIAL ADVISOR ENDPOINTS -------------------
 
 app.post('/api/ai/advisor', authenticateJWT, async (req: any, res) => {
