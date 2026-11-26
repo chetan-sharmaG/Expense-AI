@@ -767,6 +767,15 @@ app.delete('/api/users/:id', authenticateJWT, async (req: any, res) => {
   }
 });
 
+// Helper to ensure receipt images are properly formatted Data URLs
+function formatImageAsDataUrl(img?: string | null): string | undefined {
+  if (!img) return undefined;
+  if (img.startsWith('data:') || img.startsWith('http://') || img.startsWith('https://')) {
+    return img;
+  }
+  return `data:image/jpeg;base64,${img}`;
+}
+
 // Expense CRUD
 app.post('/api/expenses', authenticateJWT, async (req: any, res) => {
   const { amount, category, paidBy, date, notes, merchant, originalImage } = req.body;
@@ -791,7 +800,7 @@ app.post('/api/expenses', authenticateJWT, async (req: any, res) => {
       date,
       notes: notes || '',
       merchant: merchant || 'Unknown Merchant',
-      originalImage,
+      originalImage: formatImageAsDataUrl(originalImage),
       createdAt: new Date().toISOString()
     });
 
@@ -1673,7 +1682,7 @@ async function handleIncomingMessageFlow(
         date: exp.date,
         notes: exp.notes,
         merchant: exp.merchant,
-        originalImage: exp.originalImage,
+        originalImage: formatImageAsDataUrl(exp.originalImage),
         createdAt: new Date().toISOString()
       });
 
@@ -1833,7 +1842,7 @@ async function handleIncomingMessageFlow(
             date: exp.date || todayStr,
             notes: exp.notes || '',
             merchant: exp.merchant,
-            originalImage: base64Image
+            originalImage: formatImageAsDataUrl(base64Image)
           },
           updatedAt: new Date().toISOString(),
           expiresAt
@@ -1866,7 +1875,7 @@ async function handleIncomingMessageFlow(
         date: exp.date || todayStr,
         notes: exp.notes || '',
         merchant: exp.merchant,
-        originalImage: base64Image,
+        originalImage: formatImageAsDataUrl(base64Image),
         createdAt: new Date().toISOString()
       });
 
@@ -1890,7 +1899,7 @@ async function handleIncomingMessageFlow(
             date: exp.date || todayStr,
             notes: exp.notes || '',
             merchant: exp.merchant,
-            originalImage: base64Image
+            originalImage: formatImageAsDataUrl(base64Image)
           },
           updatedAt: new Date().toISOString(),
           expiresAt
@@ -1953,7 +1962,7 @@ async function handleIncomingMessageFlow(
           date: exp.date || todayStr,
           notes: exp.notes || '',
           merchant: exp.merchant || 'Unknown',
-          originalImage: base64Image
+          originalImage: formatImageAsDataUrl(base64Image)
         },
         updatedAt: new Date().toISOString(),
         expiresAt
@@ -2342,7 +2351,7 @@ async function downloadTelegramPhoto(fileId: string): Promise<string> {
   }
 
   const arrayBuffer = await fileRes.arrayBuffer();
-  return Buffer.from(arrayBuffer).toString('base64');
+  return `data:image/jpeg;base64,${Buffer.from(arrayBuffer).toString('base64')}`;
 }
 
 async function processTelegramUpdate(update: any, traceId: string): Promise<void> {

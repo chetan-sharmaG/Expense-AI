@@ -36,6 +36,14 @@ interface ExpensesViewProps {
   onTriggerAddExpenseProcessed?: () => void;
 }
 
+const normalizeImageSrc = (img: string | null | undefined): string => {
+  if (!img) return '';
+  if (img.startsWith('data:') || img.startsWith('http://') || img.startsWith('https://')) {
+    return img;
+  }
+  return `data:image/jpeg;base64,${img}`;
+};
+
 export const CATEGORIES = [
   'Outside Food',
   'Veggies',
@@ -273,7 +281,7 @@ export default function ExpensesView({
     setFormMerchant(exp.merchant);
     setFormDate(exp.date);
     setFormNotes(exp.notes);
-    setFormImage(exp.originalImage || null);
+    setFormImage(normalizeImageSrc(exp.originalImage) || null);
     setIsEditOpen(true);
   };
 
@@ -628,12 +636,12 @@ export default function ExpensesView({
                             {expense.originalImage ? (
                               <button 
                                 type="button"
-                                onClick={() => setViewerImage(expense.originalImage || null)}
+                                onClick={() => setViewerImage(normalizeImageSrc(expense.originalImage))}
                                 className="size-11 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 overflow-hidden shrink-0 cursor-pointer hover:scale-105 transition-all glow-pill"
                                 title="Click to view full image"
                               >
                                 <img 
-                                  src={expense.originalImage} 
+                                  src={normalizeImageSrc(expense.originalImage)} 
                                   alt="receipt preview" 
                                   className="size-full object-cover" 
                                   referrerPolicy="no-referrer"
@@ -737,12 +745,12 @@ export default function ExpensesView({
                         {expense.originalImage ? (
                           <button 
                             type="button"
-                            onClick={() => setViewerImage(expense.originalImage || null)}
+                            onClick={() => setViewerImage(normalizeImageSrc(expense.originalImage))}
                             className="size-11 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 overflow-hidden shrink-0 cursor-pointer hover:scale-105 transition-all glow-pill"
                             title="Click to view full image"
                           >
                             <img 
-                              src={expense.originalImage} 
+                              src={normalizeImageSrc(expense.originalImage)} 
                               alt="receipt preview" 
                               className="size-full object-cover" 
                               referrerPolicy="no-referrer"
@@ -1225,7 +1233,7 @@ export default function ExpensesView({
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={viewerImage}
+              src={normalizeImageSrc(viewerImage)}
               alt="Full receipt view"
               className="max-w-[95vw] max-h-[85vh] md:max-w-[90vw] md:max-h-[90vh] object-contain rounded-2xl border border-white/15 shadow-2xl glow-pill"
               referrerPolicy="no-referrer"
