@@ -255,3 +255,40 @@ const NotificationSchema = new Schema<INotification>({
   actionUrl: { type: String, default: '/expenses?action=add' }
 });
 export const NotificationModel = getModel<INotification>('Notification', NotificationSchema);
+
+// 12. Reminder Settings Schema (Customizable Telegram & Push Schedules)
+export interface IReminderSettings extends Document {
+  id: string;
+  familyId: string;
+  enabled: boolean;
+  frequency: 'daily' | 'weekdays' | 'custom';
+  daysOfWeek: number[]; // 0 for Sun, 1 for Mon, ..., 6 for Sat
+  time: string; // e.g. "21:00" in 24-hr IST
+  message: string;
+  channels: {
+    telegram: boolean;
+    webPush: boolean;
+  };
+  updatedAt: string;
+  lastSentDate?: string;
+}
+
+const ReminderSettingsSchema = new Schema<IReminderSettings>({
+  id:          { type: String, required: true, unique: true, default: 'default_settings' },
+  familyId:    { type: String, default: 'fam-1' },
+  enabled:     { type: Boolean, default: true },
+  frequency:   { type: String, enum: ['daily', 'weekdays', 'custom'], default: 'daily' },
+  daysOfWeek:  { type: [Number], default: [0, 1, 2, 3, 4, 5, 6] },
+  time:        { type: String, default: '21:00' },
+  message:     { 
+    type: String, 
+    default: '🌙 Evening expense check-in! Did you make any purchases or payments today? Drop a bill photo or text to log!' 
+  },
+  channels: {
+    telegram: { type: Boolean, default: true },
+    webPush:  { type: Boolean, default: true }
+  },
+  updatedAt:    { type: String, required: true },
+  lastSentDate: { type: String }
+});
+export const ReminderSettingsModel = getModel<IReminderSettings>('ReminderSettings', ReminderSettingsSchema);

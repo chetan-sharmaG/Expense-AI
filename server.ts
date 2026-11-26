@@ -38,7 +38,8 @@ import {
   WhatsAppSessionModel,
   ProcessedMessageModel,
   PushSubscriptionModel,
-  NotificationModel
+  NotificationModel,
+  ReminderSettingsModel
 } from './src/models';
 
 export const app = express();
@@ -296,10 +297,25 @@ export async function broadcastLedgerReminder(title: string, message: string, ac
     else failedCount++;
   }
 
-  console.log(`[Notification Engine] Broadcast finished: ${deliveredCount} delivered, ${failedCount} failed.`);
+  // 3. Dispatch to all Telegram linked members for 100% free delivery
+  let telegramDeliveredCount = 0;
+  for (const u of users) {
+    if (u.telegramChatId) {
+      try {
+        const tgText = `🔔 <b>${title}</b>\n\nHey <b>${u.name}</b>! ${message}\n\n📸 <i>Reply here with a receipt photo or text to log!</i>`;
+        const res = await sendTelegramMessage(u.telegramChatId, tgText);
+        if (res && res.ok) telegramDeliveredCount++;
+      } catch (err: any) {
+        console.error(`[Notification Engine] Failed sending Telegram reminder to ${u.name}:`, err.message);
+      }
+    }
+  }
+
+  console.log(`[Notification Engine] Broadcast finished: ${deliveredCount} web push delivered, ${telegramDeliveredCount} Telegram messages delivered.`);
   return {
     deliveredCount,
     failedCount,
+    telegramDeliveredCount,
     totalSubscriptions: subscriptions.length,
     usersCount: users.length
   };
@@ -2694,6 +2710,143 @@ app.get('/api/telegram/info', async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
+
+// ------------------- CUSTOMIZABLE REMINDERS & CRON -------------------
+
+// Get current reminder settings & linked family members
+app.get('/api/reminders/settings', authenticateJWT, async (req: any, res) => {
+  try {
+    let settings = await ReminderSettingsModel.findOne({ id: 'default_settings' });
+    if (!settings) {
+      settings = await ReminderSettingsModel.create({
+        id: 'default_settings',
+        familyId: 'fam-1',
+        enabled: true,
+        frequency: 'daily',
+        daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+        time: '21:00',
+        message: '🌙 Evening expense check-in! Did you make any purchases or payments today? Drop a bill photo or text to log!',
+        channels: { telegram: true, webPush: true },
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    const users = await UserModel.find({}, { password: 0 }).lean();
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'sharmasexpense_bot';
+
+    res.json({
+      settings,
+      users: users.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.whatsappNumber,
+        telegramChatId: u.telegramChatId,
+        telegramUsername: u.telegramUsername,
+        isLinked: !!u.telegramChatId,
+        inviteUrl: `https://t.me/${botUsername}?start=${u.id}`
+      })),
+      botUsername
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update reminder settings
+app.post('/api/reminders/settings', authenticateJWT, async (req: any, res) => {
+  try {
+    const { enabled, frequency, daysOfWeek, time, message, channels } = req.body;
+
+    const updated = await ReminderSettingsModel.findOneAndUpdate(
+      { id: 'default_settings' },
+      {
+        enabled: Boolean(enabled),
+        frequency: frequency || 'daily',
+        daysOfWeek: Array.isArray(daysOfWeek) ? daysOfWeek : [0, 1, 2, 3, 4, 5, 6],
+        time: time || '21:00',
+        message: message?.trim() || '🌙 Evening expense check-in! Did you make any purchases or payments today? Drop a bill photo or text to log!',
+        channels: {
+          telegram: channels?.telegram !== false,
+          webPush: channels?.webPush !== false
+        },
+        updatedAt: new Date().toISOString()
+      },
+      { upsert: true, new: true }
+    );
+
+    res.json({ ok: true, settings: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Trigger an immediate test reminder to all linked users
+app.post('/api/reminders/test', authenticateJWT, async (req: any, res) => {
+  try {
+    const settings = await ReminderSettingsModel.findOne({ id: 'default_settings' });
+    const msg = settings?.message || '🌙 Evening expense check-in! Did you make any purchases or payments today? Drop a bill photo or text to log!';
+    const title = '🔔 Test Expense Reminder';
+
+    const result = await broadcastLedgerReminder(title, msg, '/expenses?action=add');
+    res.json({ ok: true, result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Automated Cron Reminder Endpoint (called by Vercel Cron or external scheduler)
+const handleCronReminder = async (req: any, res: any) => {
+  const timeStr = new Date().toLocaleTimeString('en-IN', { hour12: false });
+  console.log(`\n==============================================================`);
+  console.log(`⏰ [CRON REMINDER CHECK-IN] ${timeStr}`);
+
+  try {
+    let settings = await ReminderSettingsModel.findOne({ id: 'default_settings' });
+    if (!settings) {
+      console.log('   No reminder settings found. Skipping.');
+      return res.json({ ok: true, skipped: true, reason: 'No settings configured' });
+    }
+
+    if (!settings.enabled) {
+      console.log('   Reminders are currently DISABLED in settings. Skipping.');
+      return res.json({ ok: true, skipped: true, reason: 'Reminders disabled' });
+    }
+
+    // Determine current day of the week in Asia/Kolkata
+    const nowUtc = new Date();
+    const istDate = new Date(nowUtc.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const currentDay = istDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const todayStr = istDate.toISOString().split('T')[0];
+
+    // Check if today is a scheduled day
+    const scheduledDays = settings.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+    if (!scheduledDays.includes(currentDay)) {
+      console.log(`   Today (Day ${currentDay}) is not in scheduled days [${scheduledDays}]. Skipping.`);
+      return res.json({ ok: true, skipped: true, reason: `Day ${currentDay} not scheduled` });
+    }
+
+    // Broadcast reminder
+    console.log(`   🚀 Dispatching reminder to all family members for ${todayStr}...`);
+    const title = '🌙 Daily Expense Check-in';
+    const message = settings.message || 'Did you make any purchases or payments today? Drop a bill photo or text to log!';
+
+    const result = await broadcastLedgerReminder(title, message, '/expenses?action=add');
+
+    // Update lastSentDate
+    settings.lastSentDate = todayStr;
+    await settings.save();
+
+    console.log(`   ✅ Reminder sent successfully:`, result);
+    return res.json({ ok: true, sent: true, date: todayStr, result });
+  } catch (err: any) {
+    console.error('   ❌ Error in cron reminder:', err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+app.get('/api/telegram/cron-reminder', handleCronReminder);
+app.post('/api/telegram/cron-reminder', handleCronReminder);
 
 // ------------------- GEMINI AI FINANCIAL ADVISOR ENDPOINTS -------------------
 

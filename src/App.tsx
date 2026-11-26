@@ -11,7 +11,7 @@ import SettlementView from './components/SettlementView';
 import FamilyView from './components/FamilyView';
 import AdvisorView from './components/AdvisorView';
 import AnalysisView from './components/AnalysisView';
-import NotificationCenter from './components/NotificationCenter';
+import RemindersView from './components/RemindersView';
 import { registerServiceWorker } from './utils/pushNotifications';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -30,6 +30,7 @@ import {
   LogOut,
   Filter,
   BrainCircuit,
+  BellRing,
   Plus,
   RefreshCw,
   ChevronLeft,
@@ -577,6 +578,7 @@ export default function App() {
     { id: 'expenses', name: 'Family Ledger', icon: Receipt },
     { id: 'settlement', name: 'Settlement Engine', icon: WalletCards },
     { id: 'family', name: 'Family & Groups', icon: Users2 },
+    { id: 'reminders', name: 'Reminders & Bot', icon: BellRing },
     { id: 'advisor', name: 'AI Advisor', icon: BrainCircuit },
   ];
 
@@ -876,15 +878,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          <NotificationCenter
-            notifications={dbState?.notifications || []}
-            authToken={userToken || ''}
-            onRefreshState={fetchState}
-            onTriggerAddExpense={() => {
-              navigate('/expenses');
-              setTriggerAddExpense(true);
-            }}
-          />
           <button
             onClick={fetchState}
             disabled={isSyncing}
@@ -1007,20 +1000,11 @@ export default function App() {
         <header className="hidden lg:flex items-center justify-between px-8 py-5 border-b border-white/10 bg-[#090c19]/70 backdrop-blur-2xl shrink-0">
           <div>
             <h1 className="text-2xl font-extrabold text-white capitalize tracking-tight font-sans">
-              {activeTab === 'expenses' ? 'Family Ledger' : activeTab === 'settlement' ? 'Settlement Engine' : activeTab === 'family' ? 'Family & Groups' : activeTab}
+              {activeTab === 'expenses' ? 'Family Ledger' : activeTab === 'settlement' ? 'Settlement Engine' : activeTab === 'family' ? 'Family & Groups' : activeTab === 'reminders' ? 'Smart Reminders & Bot' : activeTab === 'advisor' ? 'AI Advisor' : activeTab}
             </h1>
             <p className="text-xs text-slate-400 font-medium">Manage and review your family ledger operations</p>
           </div>
           <div className="flex items-center gap-3">
-            <NotificationCenter
-              notifications={dbState?.notifications || []}
-              authToken={userToken || ''}
-              onRefreshState={fetchState}
-              onTriggerAddExpense={() => {
-                navigate('/expenses');
-                setTriggerAddExpense(true);
-              }}
-            />
             <button
               onClick={fetchState}
               disabled={isSyncing}
@@ -1117,6 +1101,14 @@ export default function App() {
                       onUpdateUser={handleUpdateUser}
                       isSyncing={isSyncing}
                     />
+                  </motion.div>
+                } 
+              />
+              <Route 
+                path="/reminders" 
+                element={
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                    <RemindersView authToken={userToken || ''} />
                   </motion.div>
                 } 
               />
