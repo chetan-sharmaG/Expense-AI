@@ -2599,16 +2599,18 @@ app.post('/api/telegram/webhook', async (req, res) => {
   console.log(`\n==============================================================`);
   console.log(`✈️ [TELEGRAM WEBHOOK EVENT] ${timeStr} | Update ID: ${updateId}`);
 
-  // Return 200 OK immediately
-  res.status(200).json({ ok: true });
-
-  if (!update) return;
+  if (!update) {
+    return res.status(200).json({ ok: true });
+  }
 
   const traceId = `tg-${updateId || Date.now()}`;
   try {
+    // Await synchronously so Vercel Serverless container does NOT freeze before AI/OCR completes
     await processTelegramUpdate(update, traceId);
+    return res.status(200).json({ ok: true });
   } catch (err: any) {
     console.error(`[${traceId}] ❌ Fatal error processing Telegram update:`, err);
+    return res.status(200).json({ ok: true, error: err.message });
   }
 });
 
