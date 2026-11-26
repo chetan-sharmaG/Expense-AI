@@ -2290,6 +2290,24 @@ async function sendTelegramMessage(
   }
 }
 
+// Broadcasts native typing / uploading status animation to user chat
+async function sendTelegramChatAction(
+  chatId: string | number,
+  action: 'typing' | 'upload_photo' = 'typing'
+): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendChatAction`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, action })
+    });
+  } catch {
+    // Non-critical, ignore typing indicator network hiccups
+  }
+}
+
 async function downloadTelegramPhoto(fileId: string): Promise<string> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not configured.');
@@ -2368,12 +2386,20 @@ async function processTelegramUpdate(update: any, traceId: string): Promise<void
 
   if (!chatId) return;
 
-  console.log(`\n--------------------------------------------------------------`);
-  console.log(`[${traceId}] ✈️ TELEGRAM UPDATE RECEIVED`);
-  console.log(`   Chat ID: ${chatId} | From: ${firstName} (@${username || 'none'}, ID: ${fromId})`);
-  console.log(`   Type: ${photo ? 'photo' : (contact ? 'contact' : 'text')}`);
-  if (text) console.log(`   Text: "${text}"`);
-  if (caption) console.log(`   Caption: "${caption}"`);
+  // Broadcast instant typing/upload indicator to chat and keep active until response is sent
+  const initialAction = (photo && photo.length > 0) ? 'upload_photo' : 'typing';
+  sendTelegramChatAction(chatId, initialAction).catch(() => {});
+  const typingTimer = setInterval(() => {
+    sendTelegramChatAction(chatId, 'typing').catch(() => {});
+  }, 4500);
+
+  try {
+    console.log(`\n--------------------------------------------------------------`);
+    console.log(`[${traceId}] ✈️ TELEGRAM UPDATE RECEIVED`);
+    console.log(`   Chat ID: ${chatId} | From: ${firstName} (@${username || 'none'}, ID: ${fromId})`);
+    console.log(`   Type: ${photo ? 'photo' : (contact ? 'contact' : 'text')}`);
+    if (text) console.log(`   Text: "${text}"`);
+    if (caption) console.log(`   Caption: "${caption}"`);
 
   // Lookup linked user by telegramChatId or username
   let user = await UserModel.findOne({
@@ -2589,6 +2615,9 @@ async function processTelegramUpdate(update: any, traceId: string): Promise<void
   console.log(`[${traceId}] 📤 Sending response to Telegram chat ${chatId}...`);
   await sendTelegramMessage(chatId, replyText, replyOptions);
   console.log(`[${traceId}] 🏁 Telegram pipeline completed successfully.\n`);
+  } finally {
+    clearInterval(typingTimer);
+  }
 }
 
 // Telegram Webhook Endpoint
